@@ -8,9 +8,9 @@ extends CharacterBody2D
 @export var patrol_right := 160.0
 @export var contact_damage := 1
 @export var knockback_resistance := 0.82
+@export var move_direction := -1.0
 
 var health := max_health
-var move_direction := -1.0
 var hurt_timer := 0.0
 var dead := false
 var origin_x := 0.0
