@@ -1,0 +1,10 @@
+[gd_scene format=3]
+
+[node name="Diagnostic" type="Node2D"]
+
+[node name="TestLabel" type="Label" parent="."]
+offset_left = 100.0
+offset_top = 100.0
+offset_right = 500.0
+offset_bottom = 150.0
+text = "WELL DIAGNOSTIC SCENE"
