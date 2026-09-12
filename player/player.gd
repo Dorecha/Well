@@ -4,9 +4,6 @@ extends CharacterBody2D
 signal health_changed(current: int, maximum: int)
 signal checkpoint_reached(position: Vector2)
 
-# -------------------------
-# MOVEMENT
-# -------------------------
 @export var max_speed := 320.0
 @export var ground_acceleration := 2200.0
 @export var ground_friction := 2800.0
@@ -17,16 +14,10 @@ signal checkpoint_reached(position: Vector2)
 @export var jump_buffer_time := 0.12
 @export var variable_jump_multiplier := 0.45
 
-# -------------------------
-# DASH
-# -------------------------
 @export var dash_speed := 950.0
 @export var dash_duration := 0.14
 @export var dash_cooldown := 0.20
 
-# -------------------------
-# COMBAT
-# -------------------------
 @export var max_health := 3
 @export var attack_duration := 0.16
 @export var attack_cooldown := 0.12
@@ -146,7 +137,7 @@ func _process_dash_input() -> void:
 	if not dash_available or dash_cooldown_timer > 0.0 or is_attacking:
 		return
 
-	var input_direction := Input.get_vector("move_left", "move_right", "jump", "restart")
+	var input_direction := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	if input_direction == Vector2.ZERO:
 		dash_direction = Vector2(facing_direction, 0.0)
 	else:
