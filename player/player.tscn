@@ -35,3 +35,13 @@ position = Vector2(35, 0)
 polygon = PackedVector2Array(-27, -12, 27, -12, 27, 12, -27, 12)
 color = Color(0.98, 0.78, 0.25, 0.55)
 visible = false
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(120, -55)
+position_smoothing_enabled = true
+position_smoothing_speed = 8.0
+limit_left = 0
+limit_top = 0
+limit_right = 2800
+limit_bottom = 720
+limit_smoothed = true
