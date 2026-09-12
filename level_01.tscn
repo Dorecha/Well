@@ -1,0 +1,33 @@
+[gd_scene format=3 uid="uid://cporb0lphl3ud"]
+
+[ext_resource type="Script" uid="uid://24agd5iehje8" path="res://well_body.gd" id="1_bri2l"]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_opwdl"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_f2u03"]
+size = Vector2(50, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_opwdl"]
+size = Vector2(4000, 500)
+
+[node name="level" type="Node2D" unique_id=470561536]
+
+[node name="Well_body" type="CharacterBody2D" parent="." unique_id=766459186]
+script = ExtResource("1_bri2l")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Well_body" unique_id=1106484062]
+shape = SubResource("CapsuleShape2D_opwdl")
+
+[node name="Sprite2D" type="Sprite2D" parent="Well_body" unique_id=882614025]
+
+[node name="AttackHitbox" type="Area2D" parent="Well_body" unique_id=946071712]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Well_body/AttackHitbox" unique_id=100824516]
+position = Vector2(40, 0)
+shape = SubResource("RectangleShape2D_f2u03")
+
+[node name="Ground" type="StaticBody2D" parent="." unique_id=1877491042]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Ground" unique_id=1740365265]
+position = Vector2(134, 688)
+shape = SubResource("RectangleShape2D_opwdl")
