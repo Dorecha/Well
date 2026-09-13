@@ -85,7 +85,16 @@ position = Vector2(170, 500)
 [node name="LevelDoor" parent="." instance=ExtResource("3_portal")]
 position = Vector2(850, 480)
 destination = "res://levels/level_01.tscn"
+destination_spawn_id = "FromHub"
 prompt = "E — в Сад"
+
+[node name="SpawnPoints" type="Node2D" parent="."]
+
+[node name="FromHub" type="Marker2D" parent="SpawnPoints"]
+position = Vector2(820, 500)
+
+[node name="FromGarden" type="Marker2D" parent="SpawnPoints"]
+position = Vector2(940, 500)
 
 [node name="HUD" type="CanvasLayer" parent="."]
 
@@ -103,7 +112,7 @@ offset_top = 70.0
 offset_right = 600.0
 offset_bottom = 100.0
 text = "СТРАНА ЧУДЕС — ПЕРЕКРЁСТОК"
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_sizes/font_size = 14
 
 [node name="Info" type="Label" parent="HUD"]
 offset_left = 36.0
