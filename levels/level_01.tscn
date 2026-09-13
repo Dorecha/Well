@@ -1,9 +1,10 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://levels/level_01.gd" id="1_level"]
 [ext_resource type="PackedScene" path="res://player/player.tscn" id="2_player"]
 [ext_resource type="PackedScene" path="res://enemies/basic_enemy.tscn" id="3_enemy"]
 [ext_resource type="PackedScene" path="res://systems/checkpoint.tscn" id="4_checkpoint"]
+[ext_resource type="PackedScene" path="res://systems/portal.tscn" id="5_portal"]
 
 [sub_resource type="RectangleShape2D" id="GroundShape"]
 size = Vector2(2800, 120)
@@ -103,6 +104,11 @@ move_direction = 1.0
 
 [node name="Checkpoint" parent="." instance=ExtResource("4_checkpoint")]
 position = Vector2(1180, 560)
+
+[node name="HubDoor" parent="." instance=ExtResource("5_portal")]
+position = Vector2(2680, 560)
+destination = "res://hub/hub.tscn"
+prompt = "E — вернуться в хаб"
 
 [node name="HUD" type="CanvasLayer" parent="."]
 
