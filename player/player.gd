@@ -50,7 +50,8 @@ var respawning := false
 @onready var body_visual: Polygon2D = $Body
 
 func _ready() -> void:
-	var level_path := get_tree().current_scene.scene_file_path
+	var scene_root := get_parent()
+	var level_path := scene_root.scene_file_path if scene_root != null else ""
 	checkpoint_position = GameState.get_checkpoint(level_path, global_position)
 	attack_hitbox.monitoring = false
 	attack_visual.visible = false
@@ -214,7 +215,8 @@ func take_damage(amount: int, source_x: float) -> void:
 
 func set_checkpoint(new_position: Vector2) -> void:
 	checkpoint_position = new_position
-	var level_path := get_tree().current_scene.scene_file_path
+	var scene_root := get_parent()
+	var level_path := scene_root.scene_file_path if scene_root != null else ""
 	GameState.set_checkpoint(level_path, new_position)
 	GameState.current_hp = max_health
 	checkpoint_reached.emit(new_position)
