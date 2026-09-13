@@ -108,7 +108,16 @@ position = Vector2(1180, 560)
 [node name="HubDoor" parent="." instance=ExtResource("5_portal")]
 position = Vector2(2680, 560)
 destination = "res://hub/hub.tscn"
+destination_spawn_id = "FromGarden"
 prompt = "E — вернуться в хаб"
+
+[node name="SpawnPoints" type="Node2D" parent="."]
+
+[node name="FromHub" type="Marker2D" parent="SpawnPoints"]
+position = Vector2(180, 560)
+
+[node name="FromGarden" type="Marker2D" parent="SpawnPoints"]
+position = Vector2(2630, 560)
 
 [node name="HUD" type="CanvasLayer" parent="."]
 
