@@ -55,6 +55,7 @@ func _ready() -> void:
 	attack_hitbox.monitoring = false
 	attack_visual.visible = false
 	attack_hitbox.area_entered.connect(_on_attack_hitbox_area_entered)
+	GameState.max_hp = max_health
 	health = max_health
 	GameState.current_hp = health
 	health_changed.emit(health, max_health)
