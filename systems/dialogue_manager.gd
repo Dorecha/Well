@@ -27,8 +27,7 @@ func _build_ui() -> void:
 
 	_panel = PanelContainer.new()
 	_panel.visible = false
-	_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_panel.position = Vector2(54, -178)
+	_panel.position = Vector2(54, 450)
 	_panel.size = Vector2(1044, 150)
 	_panel.add_theme_stylebox_override("panel", _make_panel_style())
 	_layer.add_child(_panel)
