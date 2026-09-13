@@ -102,7 +102,7 @@ func _show_current() -> void:
 	if not choices.is_empty():
 		_waiting_for_choice = true
 		_hint_label.text = "Выбери вариант"
-		for i in choices.size():
+		for i in range(choices.size()):
 			var choice: Dictionary = choices[i]
 			var button := Button.new()
 			button.text = str(choice.get("text", "Вариант %d" % (i + 1)))
@@ -128,7 +128,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not _active or _waiting_for_choice:
 		return
 	if event.is_action_pressed("dialogue_advance") or event.is_action_pressed("interact"):
-		_index += 1
+		var entry := _queue[_index]
+		_index = int(entry.get("next", _index + 1))
 		_show_current()
 		get_viewport().set_input_as_handled()
 
