@@ -10,7 +10,13 @@ func _ready() -> void:
 	npc_area.body_entered.connect(_on_guide_entered)
 	npc_area.body_exited.connect(_on_guide_exited)
 	npc_prompt.visible = false
-	$HUD/Info.text = "H — ХАБ   |   E — взаимодействие   |   A / D — движение   |   SPACE — прыжок   |   SHIFT — dash   |   Z — атака"
+	$HUD/Info.text = "E — взаимодействие   |   A / D — движение   |   SPACE — прыжок   |   SHIFT — dash   |   Z — атака"
+	var camera := player.get_node_or_null("Camera2D") as Camera2D
+	if camera:
+		camera.limit_left = 0
+		camera.limit_top = 0
+		camera.limit_right = 1600
+		camera.limit_bottom = 720
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not _near_guide or DialogueManager.is_active():
