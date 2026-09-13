@@ -11,12 +11,21 @@ func _ready() -> void:
 	npc_area.body_exited.connect(_on_guide_exited)
 	npc_prompt.visible = false
 	$HUD/Info.text = "E — взаимодействие   |   A / D — движение   |   SPACE — прыжок   |   SHIFT — dash   |   Z — атака"
+	_apply_spawn()
 	var camera := player.get_node_or_null("Camera2D") as Camera2D
 	if camera:
 		camera.limit_left = 0
 		camera.limit_top = 0
 		camera.limit_right = 1600
 		camera.limit_bottom = 720
+
+func _apply_spawn() -> void:
+	var spawn_id := GameState.consume_spawn_id()
+	if spawn_id == "":
+		return
+	var marker := get_node_or_null("SpawnPoints/" + spawn_id) as Marker2D
+	if marker:
+		player.global_position = marker.global_position
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not _near_guide or DialogueManager.is_active():
@@ -39,7 +48,8 @@ func _open_guide_dialogue() -> void:
 	else:
 		DialogueManager.start_dialogue([
 			{"speaker": "Незнакомец", "text": "Сад ждёт тебя."},
-			{"speaker": "Велл", "text": "Что-то подсказывает мне, что это плохой знак."}
+			{"speaker": "Велл", "text": "Что-то подсказывает мне, что это плохой знак."},
+			{"speaker": "Незнакомец", "text": "Тогда доверься этому чувству."}
 		])
 
 func _on_guide_entered(body: Node) -> void:
