@@ -7,7 +7,17 @@ extends Node2D
 func _ready() -> void:
 	player.health_changed.connect(_on_health_changed)
 	player.checkpoint_reached.connect(_on_checkpoint_reached)
+	_apply_spawn()
 	_on_health_changed(player.health, player.max_health)
+
+func _apply_spawn() -> void:
+	var spawn_id := GameState.consume_spawn_id()
+	if spawn_id == "":
+		return
+	var marker := get_node_or_null("SpawnPoints/" + spawn_id) as Marker2D
+	if marker:
+		player.global_position = marker.global_position
+		player.checkpoint_position = marker.global_position
 
 func _on_health_changed(current: int, maximum: int) -> void:
 	health_label.text = "HP  " + "■ ".repeat(current) + "□ ".repeat(maximum - current)
