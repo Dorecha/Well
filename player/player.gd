@@ -50,10 +50,13 @@ var respawning := false
 @onready var body_visual: Polygon2D = $Body
 
 func _ready() -> void:
-	checkpoint_position = global_position
+	var level_path := get_tree().current_scene.scene_file_path
+	checkpoint_position = GameState.get_checkpoint(level_path, global_position)
 	attack_hitbox.monitoring = false
 	attack_visual.visible = false
 	attack_hitbox.area_entered.connect(_on_attack_hitbox_area_entered)
+	health = max_health
+	GameState.current_hp = health
 	health_changed.emit(health, max_health)
 
 func _physics_process(delta: float) -> void:
@@ -61,7 +64,7 @@ func _physics_process(delta: float) -> void:
 		_respawn()
 		return
 
-	if respawning:
+	if respawning or DialogueManager.is_active():
 		return
 
 	if global_position.y > 900.0:
@@ -199,6 +202,7 @@ func take_damage(amount: int, source_x: float) -> void:
 		return
 
 	health = max(health - amount, 0)
+	GameState.current_hp = health
 	hurt_invulnerability_timer = hurt_invulnerability
 	velocity.x = source_x
 	velocity.y = -280.0
@@ -209,6 +213,9 @@ func take_damage(amount: int, source_x: float) -> void:
 
 func set_checkpoint(new_position: Vector2) -> void:
 	checkpoint_position = new_position
+	var level_path := get_tree().current_scene.scene_file_path
+	GameState.set_checkpoint(level_path, new_position)
+	GameState.current_hp = max_health
 	checkpoint_reached.emit(new_position)
 
 func _respawn() -> void:
@@ -223,6 +230,7 @@ func _respawn() -> void:
 	velocity = Vector2.ZERO
 	global_position = checkpoint_position
 	health = max_health
+	GameState.current_hp = health
 	health_changed.emit(health, max_health)
 	hurt_invulnerability_timer = 0.8
 	body_visual.modulate = Color(1, 1, 1, 0.55)
