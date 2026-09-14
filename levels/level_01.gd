@@ -11,14 +11,15 @@ func _ready() -> void:
 	_on_health_changed(player.health, player.max_health)
 
 func _apply_spawn() -> void:
-	var spawn_id := GameState.consume_spawn_id()
+	var game_state: Node = get_node("/root/GameState")
+	var spawn_id: String = game_state.consume_spawn_id()
 	if spawn_id == "":
 		return
 	var marker := get_node_or_null("SpawnPoints/" + spawn_id) as Marker2D
 	if marker:
 		var level_path := get_tree().current_scene.scene_file_path
 		player.global_position = marker.global_position
-		player.checkpoint_position = GameState.get_checkpoint(level_path, marker.global_position)
+		player.checkpoint_position = game_state.get_checkpoint(level_path, marker.global_position)
 
 func _on_health_changed(current: int, maximum: int) -> void:
 	health_label.text = "HP  " + "■ ".repeat(current) + "□ ".repeat(maximum - current)
