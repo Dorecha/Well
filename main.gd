@@ -511,7 +511,6 @@ func _build_viewer() -> void:
     # он не показывает дочерний SubViewport корректно. Вместо него выводим
     # текстуру SubViewport напрямую через TextureRect.
     var vp := SubViewport.new()
-    vp.position = Vector2.ZERO
     vp.size = Vector2i(990, 790)
     vp.transparent_bg = false
     vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
