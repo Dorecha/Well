@@ -115,26 +115,20 @@ func _show_home() -> void:
     mode = "home"
     _clear_content()
     title_label.text = APP_NAME
-    status_label.text = "Офлайн-программа для музейных 3D-экспозиций"
+    status_label.text = ""
 
-    var panel := _panel(Vector2(620, 250), Vector2(680, 480))
+    var panel := _panel(Vector2(620, 285), Vector2(680, 360))
+
     var head := Label.new()
-    head.text = "Музейный 3D-просмотрщик"
+    head.text = "Музейная экспозиция"
     head.position = Vector2(55, 45)
     head.add_theme_font_size_override("font_size", 32)
     head.add_theme_color_override("font_color", Color("#4a3b32"))
     panel.add_child(head)
 
-    var sub := Label.new()
-    sub.text = "Одна фиксированная сцена.\nСотрудник добавляет только текст и 3D-файл."
-    sub.position = Vector2(55, 105)
-    sub.add_theme_font_size_override("font_size", 19)
-    sub.add_theme_color_override("font_color", Color("#736357"))
-    panel.add_child(sub)
-
     var open := Button.new()
     open.text = "Открыть проект"
-    open.position = Vector2(55, 190)
+    open.position = Vector2(55, 125)
     open.size = Vector2(570, 70)
     open.add_theme_font_size_override("font_size", 23)
     open.pressed.connect(_open_project_dialog)
@@ -142,18 +136,11 @@ func _show_home() -> void:
 
     var newb := Button.new()
     newb.text = "Создать новый проект"
-    newb.position = Vector2(55, 280)
+    newb.position = Vector2(55, 215)
     newb.size = Vector2(570, 70)
     newb.add_theme_font_size_override("font_size", 23)
     newb.pressed.connect(_show_new_project)
     panel.add_child(newb)
-
-    var info := Label.new()
-    info.text = "Первая версия прототипа • без интернета • Windows"
-    info.position = Vector2(55, 385)
-    info.add_theme_font_size_override("font_size", 15)
-    info.add_theme_color_override("font_color", Color("#9b8a7e"))
-    panel.add_child(info)
 
 func _show_new_project() -> void:
     mode = "new"
@@ -423,8 +410,9 @@ func _build_viewer() -> void:
 
     var vp := SubViewport.new()
     vp.size = Vector2i(990, 790)
-    vp.transparent_bg = true
+    vp.transparent_bg = false
     vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+    vp.world_3d = World3D.new()
     model_host.add_child(vp)
 
     var scene3d := Node3D.new()
@@ -458,9 +446,10 @@ func _build_viewer() -> void:
 
     camera = Camera3D.new()
     camera.position = Vector3(0, 0.4, camera_distance)
-    camera.look_at_from_position(camera.position, Vector3.ZERO)
-    camera.current = true
+    camera.fov = 45.0
     scene3d.add_child(camera)
+    camera.look_at_from_position(camera.position, Vector3.ZERO)
+    camera.make_current()
 
     info_title = Label.new()
     info_title.position = Vector2(35, 35)
@@ -560,12 +549,26 @@ func _calculate_bounds(node: Node) -> AABB:
     for child in node.get_children():
         if child is MeshInstance3D:
             var mesh_child: MeshInstance3D = child as MeshInstance3D
-            var a: AABB = mesh_child.get_aabb()
-            a.position = child.global_transform * a.position
-            result = a if not found else result.merge(a)
-            found = true
+            var local_box: AABB = mesh_child.get_aabb()
+            var corners := [
+                local_box.position,
+                local_box.position + Vector3(local_box.size.x, 0, 0),
+                local_box.position + Vector3(0, local_box.size.y, 0),
+                local_box.position + Vector3(0, 0, local_box.size.z),
+                local_box.position + Vector3(local_box.size.x, local_box.size.y, 0),
+                local_box.position + Vector3(local_box.size.x, 0, local_box.size.z),
+                local_box.position + Vector3(0, local_box.size.y, local_box.size.z),
+                local_box.end
+            ]
+            for corner in corners:
+                var world_point: Vector3 = mesh_child.global_transform * corner
+                if not found:
+                    result = AABB(world_point, Vector3.ZERO)
+                    found = true
+                else:
+                    result = result.expand(world_point)
         if child is Node:
-            var sub := _calculate_bounds(child)
+            var sub: AABB = _calculate_bounds(child)
             if sub.size.length() > 0.001:
                 result = sub if not found else result.merge(sub)
                 found = true
