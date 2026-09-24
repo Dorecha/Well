@@ -459,6 +459,7 @@ func _build_viewer() -> void:
     camera = Camera3D.new()
     camera.position = Vector3(0, 0.4, camera_distance)
     camera.look_at_from_position(camera.position, Vector3.ZERO)
+    camera.current = true
     scene3d.add_child(camera)
 
     info_title = Label.new()
@@ -493,14 +494,6 @@ func _build_viewer() -> void:
     next.add_theme_font_size_override("font_size", 35)
     next.pressed.connect(_next_exhibit)
     info_panel.add_child(next)
-
-    var edit := Button.new()
-    edit.text = "Вернуться в редактор"
-    edit.position = Vector2(470, 680)
-    edit.size = Vector2(270, 60)
-    edit.add_theme_font_size_override("font_size", 18)
-    edit.pressed.connect(_show_editor)
-    info_panel.add_child(edit)
 
     var hint := Label.new()
     hint.text = "Проведите пальцем по модели — вращение • щипок — масштаб"
@@ -600,6 +593,12 @@ func _on_model_gui_input(event: InputEvent) -> void:
     elif event is InputEventMagnifyGesture:
         camera_distance = clamp(camera_distance / event.factor, 1.5, 10.0)
         camera.position.z = camera_distance
+
+func _input(event: InputEvent) -> void:
+    if mode == "viewer" and event is InputEventKey and event.pressed and not event.echo:
+        if event.keycode == KEY_ESCAPE:
+            _show_editor()
+            get_viewport().set_input_as_handled()
 
 func _orbit(delta: Vector2) -> void:
     if model_pivot == null:
