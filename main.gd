@@ -507,24 +507,19 @@ func _build_viewer() -> void:
     var model_panel := _panel(Vector2(45, 135), Vector2(1030, 830))
     var info_panel := _panel(Vector2(1100, 135), Vector2(775, 830))
 
-    # Не используем SubViewportContainer: в некоторых конфигурациях Godot
-    # он не показывает дочерний SubViewport корректно. Вместо него выводим
-    # текстуру SubViewport напрямую через TextureRect.
+    var model_host := SubViewportContainer.new()
+    model_host.position = Vector2(20, 20)
+    model_host.size = Vector2(990, 790)
+    model_host.stretch = true
+    model_host.mouse_filter = Control.MOUSE_FILTER_STOP
+    model_panel.add_child(model_host)
+
     var vp := SubViewport.new()
     vp.size = Vector2i(990, 790)
     vp.transparent_bg = false
     vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
     vp.world_3d = World3D.new()
-    model_panel.add_child(vp)
-
-    var viewport_texture := TextureRect.new()
-    viewport_texture.position = Vector2(20, 20)
-    viewport_texture.size = Vector2(990, 790)
-    viewport_texture.texture = vp.get_texture()
-    viewport_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-    viewport_texture.stretch_mode = TextureRect.STRETCH_SCALE
-    viewport_texture.mouse_filter = Control.MOUSE_FILTER_STOP
-    model_panel.add_child(viewport_texture)
+    model_host.add_child(vp)
 
     var scene3d := Node3D.new()
     vp.add_child(scene3d)
@@ -603,7 +598,7 @@ func _build_viewer() -> void:
     hint.add_theme_color_override("font_color", Color("#8b796d"))
     model_panel.add_child(hint)
 
-    viewport_texture.gui_input.connect(_on_model_gui_input)
+    model_host.gui_input.connect(_on_model_gui_input)
     _apply_theme()
 
 func _load_current_model() -> void:
