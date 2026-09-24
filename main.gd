@@ -507,18 +507,25 @@ func _build_viewer() -> void:
     var model_panel := _panel(Vector2(45, 135), Vector2(1030, 830))
     var info_panel := _panel(Vector2(1100, 135), Vector2(775, 830))
 
-    var model_host := SubViewportContainer.new()
-    model_host.position = Vector2(20, 20)
-    model_host.size = Vector2(990, 790)
-    model_host.stretch = true
-    model_panel.add_child(model_host)
-
+    # Не используем SubViewportContainer: в некоторых конфигурациях Godot
+    # он не показывает дочерний SubViewport корректно. Вместо него выводим
+    # текстуру SubViewport напрямую через TextureRect.
     var vp := SubViewport.new()
+    vp.position = Vector2.ZERO
     vp.size = Vector2i(990, 790)
     vp.transparent_bg = false
     vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
     vp.world_3d = World3D.new()
-    model_host.add_child(vp)
+    model_panel.add_child(vp)
+
+    var viewport_texture := TextureRect.new()
+    viewport_texture.position = Vector2(20, 20)
+    viewport_texture.size = Vector2(990, 790)
+    viewport_texture.texture = vp.get_texture()
+    viewport_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    viewport_texture.stretch_mode = TextureRect.STRETCH_SCALE
+    viewport_texture.mouse_filter = Control.MOUSE_FILTER_STOP
+    model_panel.add_child(viewport_texture)
 
     var scene3d := Node3D.new()
     vp.add_child(scene3d)
@@ -597,7 +604,7 @@ func _build_viewer() -> void:
     hint.add_theme_color_override("font_color", Color("#8b796d"))
     model_panel.add_child(hint)
 
-    model_host.gui_input.connect(_on_model_gui_input)
+    viewport_texture.gui_input.connect(_on_model_gui_input)
     _apply_theme()
 
 func _load_current_model() -> void:
@@ -677,15 +684,13 @@ func _count_meshes(node: Node) -> int:
 
 
 func _add_viewer_test_object() -> void:
-    # Диагностический объект: если он виден, сам SubViewport и камера работают.
+    # Диагностический объект: если он виден, сам 3D-мир и камера работают.
     var mesh_instance := MeshInstance3D.new()
     var box := BoxMesh.new()
     box.size = Vector3(1.8, 1.8, 1.8)
     mesh_instance.mesh = box
-    mesh_instance.position = Vector3.ZERO
     var material := StandardMaterial3D.new()
     material.albedo_color = Color(0.8, 0.25, 0.12, 1.0)
-    material.metallic = 0.0
     material.roughness = 0.55
     mesh_instance.material_override = material
     model_pivot.add_child(mesh_instance)
