@@ -613,6 +613,8 @@ func _build_viewer() -> void:
 
     model_panel.gui_input.connect(_on_model_gui_input)
     _apply_theme()
+    # _apply_theme() стилизует Panel заново, поэтому возвращаем прозрачность области 3D.
+    model_panel.add_theme_stylebox_override("panel", transparent_style)
 
 
 func _set_3d_background_visible(viewer: bool) -> void:
