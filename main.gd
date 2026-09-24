@@ -554,8 +554,8 @@ func _fit_model(scene: Node3D) -> void:
     if bounds.size.length() > 0.001:
         var center := bounds.position + bounds.size * 0.5
         scene.position -= center
-        var diameter := max(bounds.size.x, max(bounds.size.y, bounds.size.z))
-        var scale := 2.4 / max(diameter, 0.001)
+        var diameter: float = maxf(bounds.size.x, maxf(bounds.size.y, bounds.size.z))
+        var scale: float = 2.4 / maxf(diameter, 0.001)
         scene.scale = Vector3.ONE * scale
         camera_distance = 4.0
         camera.position = Vector3(0, 0.2, camera_distance)
@@ -566,7 +566,8 @@ func _calculate_bounds(node: Node) -> AABB:
     var result := AABB()
     for child in node.get_children():
         if child is MeshInstance3D:
-            var a := child.get_aabb()
+            var mesh_child: MeshInstance3D = child as MeshInstance3D
+            var a: AABB = mesh_child.get_aabb()
             a.position = child.global_transform * a.position
             result = a if not found else result.merge(a)
             found = true
