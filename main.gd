@@ -9,12 +9,14 @@ var projects: Array = []
 var current_project: Dictionary = {}
 var current_exhibit_index := -1
 var mode := "home"
+var dark_theme := false
 
 var root_ui: Control
 var content: Control
 var title_label: Label
 var status_label: Label
 var file_dialog: FileDialog
+var theme_button: Button
 var model_root: Node3D
 var camera: Camera3D
 var model_pivot: Node3D
@@ -77,6 +79,106 @@ func _build_root() -> void:
     file_dialog.file_selected.connect(_on_model_selected)
     root_ui.add_child(file_dialog)
 
+    theme_button = Button.new()
+    theme_button.position = Vector2(1635, 35)
+    theme_button.size = Vector2(230, 52)
+    theme_button.add_theme_font_size_override("font_size", 16)
+    theme_button.pressed.connect(_toggle_theme)
+    root_ui.add_child(theme_button)
+    _apply_theme()
+
+func _toggle_theme() -> void:
+    dark_theme = not dark_theme
+    _apply_theme()
+
+func _theme_bg() -> Color:
+    return Color("#171513") if dark_theme else Color("#f4f0eb")
+
+func _theme_panel() -> Color:
+    return Color("#24211e") if dark_theme else Color("#fffdf9")
+
+func _theme_text() -> Color:
+    return Color("#f2ebe4") if dark_theme else Color("#4a3b32")
+
+func _theme_secondary() -> Color:
+    return Color("#b9aaa0") if dark_theme else Color("#736357")
+
+func _theme_border() -> Color:
+    return Color("#463d37") if dark_theme else Color("#e1d7cf")
+
+func _theme_button() -> Color:
+    return Color("#3b3631") if dark_theme else Color("#6f6d6b")
+
+func _theme_button_hover() -> Color:
+    return Color("#504942") if dark_theme else Color("#85817d")
+
+func _style_box(bg: Color, radius: int = 12, border: Color = Color.TRANSPARENT) -> StyleBoxFlat:
+    var s := StyleBoxFlat.new()
+    s.bg_color = bg
+    s.corner_radius_top_left = radius
+    s.corner_radius_top_right = radius
+    s.corner_radius_bottom_left = radius
+    s.corner_radius_bottom_right = radius
+    if border.a > 0.0:
+        s.border_width_left = 1
+        s.border_width_top = 1
+        s.border_width_right = 1
+        s.border_width_bottom = 1
+        s.border_color = border
+    return s
+
+func _apply_theme() -> void:
+    if root_ui == null:
+        return
+    var bg := root_ui.get_child(0) as ColorRect
+    if bg:
+        bg.color = _theme_bg()
+    title_label.add_theme_color_override("font_color", _theme_text())
+    status_label.add_theme_color_override("font_color", _theme_secondary())
+
+    if theme_button:
+        theme_button.text = "☀  Светлая тема" if dark_theme else "☾  Тёмная тема"
+        theme_button.add_theme_color_override("font_color", _theme_text())
+        theme_button.add_theme_stylebox_override("normal", _style_box(_theme_panel(), 12, _theme_border()))
+        theme_button.add_theme_stylebox_override("hover", _style_box(_theme_button_hover(), 12, _theme_border()))
+        theme_button.add_theme_stylebox_override("pressed", _style_box(_theme_button_hover(), 12, _theme_border()))
+
+    _apply_theme_recursive(content)
+
+func _apply_theme_recursive(node: Node) -> void:
+    for child in node.get_children():
+        if child is Panel:
+            var panel := child as Panel
+            panel.add_theme_stylebox_override("panel", _style_box(_theme_panel(), 24, _theme_border()))
+        elif child is Button:
+            var button := child as Button
+            button.add_theme_color_override("font_color", _theme_text())
+            button.add_theme_color_override("font_hover_color", _theme_text())
+            button.add_theme_color_override("font_pressed_color", _theme_text())
+            button.add_theme_stylebox_override("normal", _style_box(_theme_button(), 8))
+            button.add_theme_stylebox_override("hover", _style_box(_theme_button_hover(), 8))
+            button.add_theme_stylebox_override("pressed", _style_box(_theme_button_hover(), 8))
+        elif child is Label:
+            var label := child as Label
+            label.add_theme_color_override("font_color", _theme_secondary())
+        elif child is RichTextLabel:
+            var rich := child as RichTextLabel
+            rich.add_theme_color_override("default_color", _theme_secondary())
+        elif child is LineEdit:
+            var line := child as LineEdit
+            line.add_theme_color_override("font_color", _theme_text())
+            line.add_theme_color_override("caret_color", _theme_text())
+            line.add_theme_stylebox_override("normal", _style_box(_theme_panel(), 8, _theme_border()))
+            line.add_theme_stylebox_override("focus", _style_box(_theme_panel(), 8, _theme_secondary()))
+        elif child is TextEdit:
+            var edit := child as TextEdit
+            edit.add_theme_color_override("font_color", _theme_text())
+            edit.add_theme_color_override("caret_color", _theme_text())
+            edit.add_theme_stylebox_override("normal", _style_box(_theme_panel(), 8, _theme_border()))
+            edit.add_theme_stylebox_override("focus", _style_box(_theme_panel(), 8, _theme_secondary()))
+        if child is Control:
+            _apply_theme_recursive(child)
+
 func _clear_content() -> void:
     for child in content.get_children():
         child.queue_free()
@@ -97,7 +199,7 @@ func _panel(pos: Vector2, size: Vector2) -> Panel:
     p.position = pos
     p.size = size
     var style := StyleBoxFlat.new()
-    style.bg_color = Color("#fffdf9")
+    style.bg_color = _theme_panel()
     style.corner_radius_top_left = 24
     style.corner_radius_top_right = 24
     style.corner_radius_bottom_left = 24
@@ -106,7 +208,7 @@ func _panel(pos: Vector2, size: Vector2) -> Panel:
     style.border_width_top = 1
     style.border_width_right = 1
     style.border_width_bottom = 1
-    style.border_color = Color("#e1d7cf")
+    style.border_color = _theme_border()
     p.add_theme_stylebox_override("panel", style)
     content.add_child(p)
     return p
@@ -169,6 +271,7 @@ func _show_new_project() -> void:
     back.add_theme_font_size_override("font_size", 21)
     back.pressed.connect(_show_home)
     panel.add_child(back)
+    _apply_theme()
 
 func _create_project() -> void:
     var name := editing_name.text.strip_edges()
@@ -229,6 +332,7 @@ func _show_editor() -> void:
 
     _build_editor_form(view)
     _refresh_exhibit_list()
+    _apply_theme()
 
 func _build_editor_form(panel: Panel) -> void:
     _label_on(panel, "Название", Vector2(35, 80), 17)
@@ -493,6 +597,7 @@ func _build_viewer() -> void:
     model_panel.add_child(hint)
 
     model_host.gui_input.connect(_on_model_gui_input)
+    _apply_theme()
 
 func _load_current_model() -> void:
     for child in model_pivot.get_children():
