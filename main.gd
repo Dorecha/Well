@@ -459,7 +459,7 @@ func _build_viewer() -> void:
     camera = Camera3D.new()
     camera.position = Vector3(0, 0.4, camera_distance)
     camera.look_at_from_position(camera.position, Vector3.ZERO)
-    model_pivot.add_child(camera)
+    scene3d.add_child(camera)
 
     info_title = Label.new()
     info_title.position = Vector2(35, 35)
@@ -639,8 +639,9 @@ func _set_status(text: String) -> void:
 
 func _safe_folder(s: String) -> String:
     var out := s
-    for c in ["/", "\\", ":", "*", "?", """, "<", ">", "|", " "]:
+    for c in ["/", ":", "*", "?", "<", ">", "|", " "]:
         out = out.replace(c, "_")
+    out = out.replace("\\", "_")
     return out
 
 func _project_file(code: String) -> String:
