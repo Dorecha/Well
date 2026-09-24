@@ -560,6 +560,17 @@ func _build_viewer() -> void:
     camera.look_at_from_position(camera.position, Vector3.ZERO)
     camera.make_current()
 
+    # Постоянный диагностический объект: если его не видно, проблема не в GLB.
+    var test_mesh := MeshInstance3D.new()
+    var test_box := BoxMesh.new()
+    test_box.size = Vector3(1.5, 1.5, 1.5)
+    test_mesh.mesh = test_box
+    var test_material := StandardMaterial3D.new()
+    test_material.albedo_color = Color(0.85, 0.08, 0.08, 1.0)
+    test_material.roughness = 0.45
+    test_mesh.material_override = test_material
+    model_pivot.add_child(test_mesh)
+
     info_title = Label.new()
     info_title.position = Vector2(35, 35)
     info_title.size = Vector2(705, 70)
