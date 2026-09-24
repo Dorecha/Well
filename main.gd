@@ -626,7 +626,6 @@ func _build_viewer() -> void:
     hint.add_theme_color_override("font_color", Color("#8b796d"))
     model_panel.add_child(hint)
 
-    model_panel.gui_input.connect(_on_model_gui_input)
     _apply_theme()
     # _apply_theme() стилизует Panel заново, поэтому возвращаем прозрачность области 3D.
     model_panel.add_theme_stylebox_override("panel", transparent_style)
