@@ -600,11 +600,18 @@ func _build_viewer() -> void:
     _apply_theme()
 
 func _load_current_model() -> void:
+    # Полностью очищаем предыдущую модель.
     for child in model_pivot.get_children():
-        if child != camera:
-            child.queue_free()
+        child.queue_free()
+
+    model_pivot.position = Vector3.ZERO
+    model_pivot.rotation = Vector3.ZERO
+    model_pivot.scale = Vector3.ONE
+    model_loaded = false
+
     var ex: Dictionary = current_project.exhibits[current_exhibit_index]
     info_title.text = str(ex.get("title", "Экспонат"))
+
     var body := ""
     if not str(ex.get("author", "")).is_empty():
         body += "[b]Автор / культура:[/b] " + str(ex.author) + "\n\n"
@@ -622,19 +629,26 @@ func _load_current_model() -> void:
         _set_status("У экспоната нет 3D-модели")
         return
 
-    var doc := GLTFDocument.new()
-    var state := GLTFState.new()
-    var err := doc.append_from_file(path, state)
-    if err != OK:
-        _set_status("Не удалось загрузить GLB: %s" % err)
+    # Загружаем GLB как обычную Godot PackedScene.
+    # Это надёжнее для музейного приложения, чем ручная GLTFDocument-сборка.
+    var packed: PackedScene = ResourceLoader.load(path, "PackedScene")
+    if packed == null:
+        _set_status("Godot не смог открыть GLB как 3D-сцену")
         return
-    var scene := doc.generate_scene(state)
-    if scene == null:
-        _set_status("Не удалось создать 3D-сцену")
+
+    var scene_instance := packed.instantiate()
+    if scene_instance == null or not scene_instance is Node3D:
+        _set_status("GLB не содержит корректной 3D-сцены")
         return
-    model_pivot.add_child(scene)
-    _fit_model(scene)
+
+    model_pivot.add_child(scene_instance)
+    await get_tree().process_frame
+
+    var scene_3d: Node3D = scene_instance as Node3D
+    _fit_model(scene_3d)
     model_loaded = true
+    _set_status("Модель загружена")
+
 
 func _fit_model(scene: Node3D) -> void:
     # Сначала считаем реальные границы всей импортированной сцены.
