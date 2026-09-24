@@ -851,7 +851,7 @@ func _input(event: InputEvent) -> void:
         if event.button_index == MOUSE_BUTTON_LEFT:
             if event.pressed and inside:
                 orbiting = true
-                last_pointer = event.position
+                last_pointer = get_viewport().get_mouse_position()
             elif not event.pressed:
                 orbiting = false
         elif inside and event.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -862,7 +862,10 @@ func _input(event: InputEvent) -> void:
             camera.position.z = camera_distance
 
     elif event is InputEventMouseMotion and orbiting:
-        _orbit(event.relative)
+        if inside:
+            _orbit(event.relative)
+        else:
+            orbiting = false
 
     elif event is InputEventScreenTouch and event.index == 0:
         if event.pressed:
