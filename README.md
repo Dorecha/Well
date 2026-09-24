@@ -1,0 +1,1 @@
+# Museum 3D\n\nPrototype v0.1: fixed museum scene, project manager, exhibit editor, runtime GLB import, touch/mouse model control.\n\nRun with Godot 4.x. Windows export is the intended deployment target.\n

@@ -1,7 +1,6 @@
 [application]
 config/name="Museum 3D"
 run/main_scene="res://main.tscn"
-config/features=PackedStringArray("4.7")
 
 [display]
 window/size/viewport_width=1920
@@ -14,13 +13,3 @@ window/stretch/mode="canvas_items"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 environment/defaults/default_clear_color=Color(0.95, 0.93, 0.9, 1)
-
-[application]
-config/name="Museum 3D"
-run/main_scene="res://main.tscn"
-
-[input]
-ui_cancel={
-"deadzone": 0.5,
-"events": [Object(InputEventKey,"physical_keycode":4194305)]
-}
