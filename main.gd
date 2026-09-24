@@ -637,47 +637,69 @@ func _load_current_model() -> void:
     model_loaded = true
 
 func _fit_model(scene: Node3D) -> void:
+    # Сначала считаем реальные границы всей импортированной сцены.
     var bounds := _calculate_bounds(scene)
-    if bounds.size.length() > 0.001:
-        var center := bounds.position + bounds.size * 0.5
-        scene.position -= center
-        var diameter: float = maxf(bounds.size.x, maxf(bounds.size.y, bounds.size.z))
-        var scale: float = 2.4 / maxf(diameter, 0.001)
-        scene.scale = Vector3.ONE * scale
-        camera_distance = 4.0
-        camera.position = Vector3(0, 0.2, camera_distance)
-        camera.look_at(Vector3.ZERO)
+    if bounds.size.length() <= 0.001:
+        _set_status("GLB загружен, но в нём не найдена геометрия")
+        return
+
+    # Центрируем и масштабируем весь импортированный объект через pivot.
+    # Это надёжнее, чем менять position корневого узла GLTF-сцены:
+    # у некоторых GLB корневой узел имеет собственную трансформацию.
+    var center: Vector3 = bounds.position + bounds.size * 0.5
+    var diameter: float = maxf(bounds.size.x, maxf(bounds.size.y, bounds.size.z))
+    var scale_factor: float = 2.4 / maxf(diameter, 0.001)
+
+    model_pivot.position = -center
+    model_pivot.scale = Vector3.ONE * scale_factor
+    model_pivot.rotation = Vector3.ZERO
+
+    camera_distance = 4.0
+    camera.position = Vector3(0.0, 0.2, camera_distance)
+    camera.look_at(Vector3.ZERO)
+    camera.make_current()
+    _set_status("Модель загружена")
+
 
 func _calculate_bounds(node: Node) -> AABB:
     var found := false
     var result := AABB()
+
     for child in node.get_children():
         if child is MeshInstance3D:
             var mesh_child: MeshInstance3D = child as MeshInstance3D
             var local_box: AABB = mesh_child.get_aabb()
-            var corners := [
+
+            var corners: Array[Vector3] = [
                 local_box.position,
-                local_box.position + Vector3(local_box.size.x, 0, 0),
-                local_box.position + Vector3(0, local_box.size.y, 0),
-                local_box.position + Vector3(0, 0, local_box.size.z),
-                local_box.position + Vector3(local_box.size.x, local_box.size.y, 0),
-                local_box.position + Vector3(local_box.size.x, 0, local_box.size.z),
-                local_box.position + Vector3(0, local_box.size.y, local_box.size.z),
+                local_box.position + Vector3(local_box.size.x, 0.0, 0.0),
+                local_box.position + Vector3(0.0, local_box.size.y, 0.0),
+                local_box.position + Vector3(0.0, 0.0, local_box.size.z),
+                local_box.position + Vector3(local_box.size.x, local_box.size.y, 0.0),
+                local_box.position + Vector3(local_box.size.x, 0.0, local_box.size.z),
+                local_box.position + Vector3(0.0, local_box.size.y, local_box.size.z),
                 local_box.end
             ]
-            for corner in corners:
+
+            for corner: Vector3 in corners:
                 var world_point: Vector3 = mesh_child.global_transform * corner
                 if not found:
                     result = AABB(world_point, Vector3.ZERO)
                     found = true
                 else:
                     result = result.expand(world_point)
+
         if child is Node:
             var sub: AABB = _calculate_bounds(child)
             if sub.size.length() > 0.001:
-                result = sub if not found else result.merge(sub)
-                found = true
+                if not found:
+                    result = sub
+                    found = true
+                else:
+                    result = result.merge(sub)
+
     return result
+
 
 func _on_model_gui_input(event: InputEvent) -> void:
     if event is InputEventMouseButton:
