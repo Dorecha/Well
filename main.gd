@@ -705,6 +705,21 @@ func _load_current_model() -> void:
     _set_status("Модель загружена")
 
 
+func _add_viewer_test_object() -> void:
+    if model_root == null:
+        return
+    var test_mesh := MeshInstance3D.new()
+    var test_box := BoxMesh.new()
+    test_box.size = Vector3(0.8, 0.8, 0.8)
+    test_mesh.mesh = test_box
+    test_mesh.position = Vector3(0.0, 0.0, 0.0)
+    var test_material := StandardMaterial3D.new()
+    test_material.albedo_color = Color(0.85, 0.08, 0.08, 1.0)
+    test_material.roughness = 0.45
+    test_mesh.material_override = test_material
+    model_root.add_child(test_mesh)
+
+
 func _count_meshes(node: Node) -> int:
     var count := 0
     for child in node.get_children():
