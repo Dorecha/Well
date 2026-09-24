@@ -520,8 +520,24 @@ func _build_viewer() -> void:
 
     var info_panel := _panel(Vector2(1100, 135), Vector2(775, 830))
 
+    # Отдельный SubViewport даёт настоящую обрезку по рамке модели
+    # и автоматически передаёт мышь/тач в область 3D.
+    var model_host := SubViewportContainer.new()
+    model_host.position = Vector2(1, 1)
+    model_host.size = Vector2(1028, 828)
+    model_host.stretch = true
+    model_host.mouse_filter = Control.MOUSE_FILTER_STOP
+    model_panel.add_child(model_host)
+
+    var viewport := SubViewport.new()
+    viewport.transparent_bg = false
+    viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+    viewport.world_3d = World3D.new()
+    model_host.add_child(viewport)
+    model_host.gui_input.connect(_on_model_gui_input)
+
     model_root = Node3D.new()
-    add_child(model_root)
+    viewport.add_child(model_root)
 
     var env := WorldEnvironment.new()
     var environment := Environment.new()
@@ -548,13 +564,12 @@ func _build_viewer() -> void:
     model_pivot = Node3D.new()
     model_root.add_child(model_pivot)
 
-    # Диагностический куб теперь находится вне model_pivot,
-    # поэтому загрузка GLB его не удаляет.
+    # Диагностический куб: должен быть строго внутри области 3D.
     var test_mesh := MeshInstance3D.new()
     var test_box := BoxMesh.new()
     test_box.size = Vector3(0.8, 0.8, 0.8)
     test_mesh.mesh = test_box
-    test_mesh.position = Vector3(-1.8, -0.8, 0.0)
+    test_mesh.position = Vector3(-1.2, -0.5, 0.0)
     var test_material := StandardMaterial3D.new()
     test_material.albedo_color = Color(0.85, 0.08, 0.08, 1.0)
     test_material.roughness = 0.45
