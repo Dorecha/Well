@@ -38,6 +38,7 @@ var orbiting := false
 var last_pointer := Vector2.ZERO
 var camera_distance := 4.0
 var model_loaded := false
+var model_error := ""
 
 func _ready() -> void:
     DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(PROJECTS_DIR))
@@ -638,12 +639,16 @@ func _load_current_model() -> void:
     var error: Error = document.append_from_file(path, state)
 
     if error != OK:
-        _set_status("Ошибка загрузки GLB: %s" % error_string(error))
+        model_error = error_string(error)
+        _add_viewer_test_object()
+        _set_status("Ошибка GLB: %s" % model_error)
         return
 
     var generated: Node = document.generate_scene(state)
     if generated == null or not generated is Node3D:
-        _set_status("GLB не удалось преобразовать в 3D-сцену")
+        model_error = "generate_scene() не вернул Node3D"
+        _add_viewer_test_object()
+        _set_status("Ошибка GLB: " + model_error)
         return
 
     var scene_3d: Node3D = generated as Node3D
@@ -652,7 +657,9 @@ func _load_current_model() -> void:
 
     var mesh_count := _count_meshes(scene_3d)
     if mesh_count == 0:
-        _set_status("GLB загружен, но в нём нет MeshInstance3D")
+        model_error = "В сгенерированной сцене 0 MeshInstance3D"
+        _add_viewer_test_object()
+        _set_status("Ошибка GLB: " + model_error)
         return
 
     _fit_model(scene_3d)
@@ -667,6 +674,27 @@ func _count_meshes(node: Node) -> int:
             count += 1
         count += _count_meshes(child)
     return count
+
+
+func _add_viewer_test_object() -> void:
+    # Диагностический объект: если он виден, сам SubViewport и камера работают.
+    var mesh_instance := MeshInstance3D.new()
+    var box := BoxMesh.new()
+    box.size = Vector3(1.8, 1.8, 1.8)
+    mesh_instance.mesh = box
+    mesh_instance.position = Vector3.ZERO
+    var material := StandardMaterial3D.new()
+    material.albedo_color = Color(0.8, 0.25, 0.12, 1.0)
+    material.metallic = 0.0
+    material.roughness = 0.55
+    mesh_instance.material_override = material
+    model_pivot.add_child(mesh_instance)
+    model_pivot.position = Vector3.ZERO
+    model_pivot.scale = Vector3.ONE
+    camera_distance = 4.0
+    camera.position = Vector3(0.0, 0.0, camera_distance)
+    camera.look_at(Vector3.ZERO)
+    camera.make_current()
 
 
 func _fit_model(scene: Node3D) -> void:
