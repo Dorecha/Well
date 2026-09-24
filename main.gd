@@ -629,25 +629,44 @@ func _load_current_model() -> void:
         _set_status("У экспоната нет 3D-модели")
         return
 
-    # Загружаем GLB как обычную Godot PackedScene.
-    # Это надёжнее для музейного приложения, чем ручная GLTFDocument-сборка.
-    var packed: PackedScene = ResourceLoader.load(path, "PackedScene")
-    if packed == null:
-        _set_status("Godot не смог открыть GLB как 3D-сцену")
+    # Внешний GLB нельзя загрузить через ResourceLoader как PackedScene:
+    # Godot импортирует такие файлы только когда они лежат внутри проекта.
+    # Для файлов, которые сотрудник выбирает с диска, используем GLTFDocument
+    # и импортируем GLB прямо во время работы приложения.
+    var document := GLTFDocument.new()
+    var state := GLTFState.new()
+    var error: Error = document.append_from_file(path, state)
+
+    if error != OK:
+        _set_status("Ошибка загрузки GLB: %s" % error_string(error))
         return
 
-    var scene_instance := packed.instantiate()
-    if scene_instance == null or not scene_instance is Node3D:
-        _set_status("GLB не содержит корректной 3D-сцены")
+    var generated: Node = document.generate_scene(state)
+    if generated == null or not generated is Node3D:
+        _set_status("GLB не удалось преобразовать в 3D-сцену")
         return
 
-    model_pivot.add_child(scene_instance)
+    var scene_3d: Node3D = generated as Node3D
+    model_pivot.add_child(scene_3d)
     await get_tree().process_frame
 
-    var scene_3d: Node3D = scene_instance as Node3D
+    var mesh_count := _count_meshes(scene_3d)
+    if mesh_count == 0:
+        _set_status("GLB загружен, но в нём нет MeshInstance3D")
+        return
+
     _fit_model(scene_3d)
     model_loaded = true
     _set_status("Модель загружена")
+
+
+func _count_meshes(node: Node) -> int:
+    var count := 0
+    for child in node.get_children():
+        if child is MeshInstance3D:
+            count += 1
+        count += _count_meshes(child)
+    return count
 
 
 func _fit_model(scene: Node3D) -> void:
