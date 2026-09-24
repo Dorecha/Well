@@ -18,6 +18,7 @@ var status_label: Label
 var file_dialog: FileDialog
 var theme_button: Button
 var model_root: Node3D
+var model_host: SubViewportContainer
 var camera: Camera3D
 var model_pivot: Node3D
 var info_title: Label
@@ -522,11 +523,11 @@ func _build_viewer() -> void:
 
     # Отдельный SubViewport даёт настоящую обрезку по рамке модели
     # и автоматически передаёт мышь/тач в область 3D.
-    var model_host := SubViewportContainer.new()
-    model_host.position = Vector2(1, 1)
-    model_host.size = Vector2(1028, 828)
+    model_host = SubViewportContainer.new()
+    model_host.position = Vector2(3, 3)
+    model_host.size = Vector2(1024, 824)
     model_host.stretch = true
-    model_host.mouse_filter = Control.MOUSE_FILTER_STOP
+    model_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
     model_panel.add_child(model_host)
 
     var viewport := SubViewport.new()
@@ -534,7 +535,6 @@ func _build_viewer() -> void:
     viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
     viewport.world_3d = World3D.new()
     model_host.add_child(viewport)
-    model_host.gui_input.connect(_on_model_gui_input)
 
     model_root = Node3D.new()
     viewport.add_child(model_root)
@@ -569,7 +569,7 @@ func _build_viewer() -> void:
     var test_box := BoxMesh.new()
     test_box.size = Vector3(0.8, 0.8, 0.8)
     test_mesh.mesh = test_box
-    test_mesh.position = Vector3(-1.2, -0.5, 0.0)
+    test_mesh.position = Vector3(0.0, 0.0, 0.0)
     var test_material := StandardMaterial3D.new()
     test_material.albedo_color = Color(0.85, 0.08, 0.08, 1.0)
     test_material.roughness = 0.45
@@ -626,9 +626,29 @@ func _build_viewer() -> void:
     hint.add_theme_color_override("font_color", Color("#8b796d"))
     model_panel.add_child(hint)
 
+    # Отдельная рамка поверх 3D-области. Она не перехватывает мышь/тач.
+    var frame := Panel.new()
+    frame.position = Vector2(1, 1)
+    frame.size = Vector2(1028, 828)
+    frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    var frame_style := StyleBoxFlat.new()
+    frame_style.bg_color = Color(0, 0, 0, 0)
+    frame_style.border_width_left = 3
+    frame_style.border_width_top = 3
+    frame_style.border_width_right = 3
+    frame_style.border_width_bottom = 3
+    frame_style.border_color = _theme_text()
+    frame_style.corner_radius_top_left = 20
+    frame_style.corner_radius_top_right = 20
+    frame_style.corner_radius_bottom_left = 20
+    frame_style.corner_radius_bottom_right = 20
+    frame.add_theme_stylebox_override("panel", frame_style)
+    model_panel.add_child(frame)
+
     _apply_theme()
-    # _apply_theme() стилизует Panel заново, поэтому возвращаем прозрачность области 3D.
     model_panel.add_theme_stylebox_override("panel", transparent_style)
+    frame_style.border_color = _theme_text()
+    frame.add_theme_stylebox_override("panel", frame_style)
 
 
 func _set_3d_background_visible(viewer: bool) -> void:
@@ -643,6 +663,7 @@ func _clear_viewer_3d() -> void:
     if model_root != null and is_instance_valid(model_root):
         model_root.queue_free()
     model_root = null
+    model_host = null
     model_pivot = null
     camera = null
     model_loaded = false
@@ -809,33 +830,53 @@ func _calculate_bounds(node: Node) -> AABB:
 
 
 func _on_model_gui_input(event: InputEvent) -> void:
-    if event is InputEventMouseButton:
-        if event.button_index == MOUSE_BUTTON_LEFT:
-            orbiting = event.pressed
-            last_pointer = event.position
-        elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
-            camera_distance = max(1.5, camera_distance - 0.3)
-            camera.position.z = camera_distance
-        elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-            camera_distance = min(10.0, camera_distance + 0.3)
-            camera.position.z = camera_distance
-    elif event is InputEventMouseMotion and orbiting:
-        _orbit(event.relative)
-    elif event is InputEventScreenTouch:
-        if event.index == 0:
-            orbiting = event.pressed
-            last_pointer = event.position
-    elif event is InputEventScreenDrag and event.index == 0:
-        _orbit(event.relative)
-    elif event is InputEventMagnifyGesture:
-        camera_distance = clamp(camera_distance / event.factor, 1.5, 10.0)
-        camera.position.z = camera_distance
+    pass
 
 func _input(event: InputEvent) -> void:
-    if mode == "viewer" and event is InputEventKey and event.pressed and not event.echo:
+    if mode != "viewer":
+        return
+
+    if event is InputEventKey and event.pressed and not event.echo:
         if event.keycode == KEY_ESCAPE:
             _show_editor()
             get_viewport().set_input_as_handled()
+            return
+
+    if model_host == null or not is_instance_valid(model_host):
+        return
+
+    var inside := model_host.get_global_rect().has_point(get_viewport().get_mouse_position())
+
+    if event is InputEventMouseButton:
+        if event.button_index == MOUSE_BUTTON_LEFT:
+            if event.pressed and inside:
+                orbiting = true
+                last_pointer = event.position
+            elif not event.pressed:
+                orbiting = false
+        elif inside and event.button_index == MOUSE_BUTTON_WHEEL_UP:
+            camera_distance = max(1.5, camera_distance - 0.3)
+            camera.position.z = camera_distance
+        elif inside and event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+            camera_distance = min(10.0, camera_distance + 0.3)
+            camera.position.z = camera_distance
+
+    elif event is InputEventMouseMotion and orbiting:
+        _orbit(event.relative)
+
+    elif event is InputEventScreenTouch and event.index == 0:
+        if event.pressed:
+            orbiting = true
+            last_pointer = event.position
+        else:
+            orbiting = false
+
+    elif event is InputEventScreenDrag and event.index == 0 and orbiting:
+        _orbit(event.relative)
+
+    elif event is InputEventMagnifyGesture:
+        camera_distance = clamp(camera_distance / event.factor, 1.5, 10.0)
+        camera.position.z = camera_distance
 
 func _orbit(delta: Vector2) -> void:
     if model_pivot == null:
