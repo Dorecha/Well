@@ -215,6 +215,8 @@ func _panel(pos: Vector2, size: Vector2) -> Panel:
     return p
 
 func _show_home() -> void:
+    _clear_viewer_3d()
+    _set_3d_background_visible(false)
     mode = "home"
     _clear_content()
     title_label.text = APP_NAME
@@ -246,6 +248,8 @@ func _show_home() -> void:
     panel.add_child(newb)
 
 func _show_new_project() -> void:
+    _clear_viewer_3d()
+    _set_3d_background_visible(false)
     mode = "new"
     _clear_content()
     title_label.text = "Новый проект"
@@ -291,6 +295,8 @@ func _create_project() -> void:
     _show_editor()
 
 func _show_editor() -> void:
+    _clear_viewer_3d()
+    _set_3d_background_visible(false)
     mode = "editor"
     _clear_content()
     title_label.text = str(current_project.get("name", "Проект"))
@@ -491,6 +497,8 @@ func _on_model_selected(path: String) -> void:
     _set_status("3D-модель добавлена")
 
 func _show_viewer() -> void:
+    _clear_viewer_3d()
+    _set_3d_background_visible(true)
     if current_exhibit_index < 0 and current_project.get("exhibits", []).size() > 0:
         current_exhibit_index = 0
     if current_project.get("exhibits", []).is_empty():
@@ -504,29 +512,16 @@ func _show_viewer() -> void:
     _load_current_model()
 
 func _build_viewer() -> void:
+    # 3D теперь рендерится непосредственно в корневой Viewport Godot.
+    # SubViewport/ViewportTexture здесь больше не используется.
     var model_panel := _panel(Vector2(45, 135), Vector2(1030, 830))
+    var transparent_style := _style_box(Color(0, 0, 0, 0), 24, _theme_border())
+    model_panel.add_theme_stylebox_override("panel", transparent_style)
+
     var info_panel := _panel(Vector2(1100, 135), Vector2(775, 830))
 
-    var vp := SubViewport.new()
-    vp.size = Vector2i(990, 790)
-    vp.transparent_bg = false
-    vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-    vp.world_3d = World3D.new()
-    add_child(vp)
-
-    var viewport_texture := TextureRect.new()
-    viewport_texture.position = Vector2(65, 155)
-    viewport_texture.size = Vector2(990, 790)
-    viewport_texture.texture = vp.get_texture()
-    viewport_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-    viewport_texture.stretch_mode = TextureRect.STRETCH_SCALE
-    viewport_texture.mouse_filter = Control.MOUSE_FILTER_STOP
-    viewport_texture.z_index = 20
-    root_ui.add_child(viewport_texture)
-
-    var scene3d := Node3D.new()
-    vp.add_child(scene3d)
-    model_root = scene3d
+    model_root = Node3D.new()
+    add_child(model_root)
 
     var env := WorldEnvironment.new()
     var environment := Environment.new()
@@ -537,39 +532,43 @@ func _build_viewer() -> void:
     environment.ambient_light_energy = 1.0
     environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
     env.environment = environment
-    scene3d.add_child(env)
+    model_root.add_child(env)
 
     var light := DirectionalLight3D.new()
     light.rotation_degrees = Vector3(-35, -25, 0)
     light.light_energy = 1.5
     light.shadow_enabled = true
-    scene3d.add_child(light)
+    model_root.add_child(light)
 
     var fill := DirectionalLight3D.new()
     fill.rotation_degrees = Vector3(-20, 145, 20)
     fill.light_energy = 0.7
-    scene3d.add_child(fill)
+    model_root.add_child(fill)
 
     model_pivot = Node3D.new()
-    scene3d.add_child(model_pivot)
+    model_root.add_child(model_pivot)
 
-    camera = Camera3D.new()
-    camera.position = Vector3(0, 0.4, camera_distance)
-    camera.fov = 45.0
-    scene3d.add_child(camera)
-    camera.look_at_from_position(camera.position, Vector3.ZERO)
-    camera.make_current()
-
-    # Постоянный диагностический объект: если его не видно, проблема не в GLB.
+    # Диагностический куб теперь находится вне model_pivot,
+    # поэтому загрузка GLB его не удаляет.
     var test_mesh := MeshInstance3D.new()
     var test_box := BoxMesh.new()
-    test_box.size = Vector3(1.5, 1.5, 1.5)
+    test_box.size = Vector3(0.8, 0.8, 0.8)
     test_mesh.mesh = test_box
+    test_mesh.position = Vector3(-1.8, -0.8, 0.0)
     var test_material := StandardMaterial3D.new()
     test_material.albedo_color = Color(0.85, 0.08, 0.08, 1.0)
     test_material.roughness = 0.45
     test_mesh.material_override = test_material
-    model_pivot.add_child(test_mesh)
+    model_root.add_child(test_mesh)
+
+    camera = Camera3D.new()
+    camera.position = Vector3(0, 0.2, camera_distance)
+    camera.fov = 45.0
+    camera.near = 0.01
+    camera.far = 10000.0
+    model_root.add_child(camera)
+    camera.look_at_from_position(camera.position, Vector3.ZERO)
+    camera.make_current()
 
     info_title = Label.new()
     info_title.position = Vector2(35, 35)
@@ -612,11 +611,33 @@ func _build_viewer() -> void:
     hint.add_theme_color_override("font_color", Color("#8b796d"))
     model_panel.add_child(hint)
 
-    viewport_texture.gui_input.connect(_on_model_gui_input)
+    model_panel.gui_input.connect(_on_model_gui_input)
     _apply_theme()
 
+
+func _set_3d_background_visible(viewer: bool) -> void:
+    if root_ui == null or root_ui.get_child_count() == 0:
+        return
+    var bg := root_ui.get_child(0) as ColorRect
+    if bg:
+        bg.visible = not viewer
+
+
+func _clear_viewer_3d() -> void:
+    if model_root != null and is_instance_valid(model_root):
+        model_root.queue_free()
+    model_root = null
+    model_pivot = null
+    camera = null
+    model_loaded = false
+    model_error = ""
+
+
 func _load_current_model() -> void:
-    # Полностью очищаем предыдущую модель.
+    # Удаляем только предыдущую импортированную модель.
+    if model_pivot == null or camera == null:
+        _set_status("Ошибка: 3D-сцена не создана")
+        return
     for child in model_pivot.get_children():
         child.queue_free()
 
@@ -689,25 +710,6 @@ func _count_meshes(node: Node) -> int:
             count += 1
         count += _count_meshes(child)
     return count
-
-
-func _add_viewer_test_object() -> void:
-    # Диагностический объект: если он виден, сам 3D-мир и камера работают.
-    var mesh_instance := MeshInstance3D.new()
-    var box := BoxMesh.new()
-    box.size = Vector3(1.8, 1.8, 1.8)
-    mesh_instance.mesh = box
-    var material := StandardMaterial3D.new()
-    material.albedo_color = Color(0.8, 0.25, 0.12, 1.0)
-    material.roughness = 0.55
-    mesh_instance.material_override = material
-    model_pivot.add_child(mesh_instance)
-    model_pivot.position = Vector3.ZERO
-    model_pivot.scale = Vector3.ONE
-    camera_distance = 4.0
-    camera.position = Vector3(0.0, 0.0, camera_distance)
-    camera.look_at(Vector3.ZERO)
-    camera.make_current()
 
 
 func _fit_model(scene: Node3D) -> void:
