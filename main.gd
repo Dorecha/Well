@@ -454,21 +454,117 @@ func _open_project_dialog() -> void:
     if projects.is_empty():
         _set_status("Проектов пока нет")
         return
+
     var popup := AcceptDialog.new()
     popup.title = "Выберите проект"
-    popup.size = Vector2(600, 450)
+    popup.size = Vector2(760, 500)
+
     var list := VBoxContainer.new()
     list.position = Vector2(25, 25)
-    list.size = Vector2(540, 330)
+    list.size = Vector2(700, 390)
+    list.add_theme_constant_override("separation", 10)
     popup.add_child(list)
+
     for i in range(projects.size()):
-        var b := Button.new()
-        b.text = "%s  [%s]" % [projects[i].name, projects[i].code]
-        b.custom_minimum_size = Vector2(530, 55)
-        b.pressed.connect(func(idx=i, p=popup): p.queue_free(); current_project = projects[idx]; _show_editor())
-        list.add_child(b)
+        var row := HBoxContainer.new()
+        row.custom_minimum_size = Vector2(700, 60)
+
+        var open_button := Button.new()
+        open_button.text = "%s  [%s]" % [projects[i].name, projects[i].code]
+        open_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        open_button.custom_minimum_size = Vector2(570, 55)
+        open_button.add_theme_font_size_override("font_size", 17)
+        open_button.pressed.connect(func(idx=i, p=popup):
+            p.queue_free()
+            current_project = projects[idx]
+            _show_editor()
+        )
+        row.add_child(open_button)
+
+        var delete_button := Button.new()
+        delete_button.text = "Удалить"
+        delete_button.custom_minimum_size = Vector2(110, 55)
+        delete_button.add_theme_font_size_override("font_size", 16)
+        delete_button.pressed.connect(func(idx=i, p=popup):
+            p.queue_free()
+            _confirm_delete_project(idx)
+        )
+        row.add_child(delete_button)
+
+        list.add_child(row)
+
     root_ui.add_child(popup)
     popup.popup_centered()
+
+
+func _confirm_delete_project(index: int) -> void:
+    if index < 0 or index >= projects.size():
+        return
+
+    var project: Dictionary = projects[index]
+    var confirm := ConfirmationDialog.new()
+    confirm.title = "Удалить проект?"
+    confirm.dialog_text = "Проект «%s» будет удалён вместе с его 3D-моделями.\n\nЭто действие нельзя отменить." % str(project.get("name", "Без названия"))
+    confirm.ok_button_text = "Удалить"
+    confirm.cancel_button_text = "Отмена"
+    confirm.confirmed.connect(func(idx=index, dialog=confirm):
+        dialog.queue_free()
+        _delete_project(idx)
+    )
+    confirm.canceled.connect(func(dialog=confirm):
+        dialog.queue_free()
+        _open_project_dialog()
+    )
+    root_ui.add_child(confirm)
+    confirm.popup_centered()
+
+
+func _delete_project(index: int) -> void:
+    if index < 0 or index >= projects.size():
+        return
+
+    var project: Dictionary = projects[index]
+    var code := str(project.get("code", ""))
+    var project_dir := PROJECTS_DIR + "/" + _safe_folder(code)
+
+    _remove_directory_recursive(project_dir)
+
+    var project_file := _project_file(code)
+    if FileAccess.file_exists(project_file):
+        DirAccess.remove_absolute(ProjectSettings.globalize_path(project_file))
+
+    var deleted_name := str(project.get("name", "Проект"))
+    projects.remove_at(index)
+
+    if current_project.get("code", "") == code:
+        current_project = {}
+        current_exhibit_index = -1
+
+    _set_status("Проект «%s» удалён" % deleted_name)
+    _open_project_dialog()
+
+
+func _remove_directory_recursive(path: String) -> void:
+    var absolute_path := ProjectSettings.globalize_path(path)
+    if not DirAccess.dir_exists_absolute(absolute_path):
+        return
+
+    var dir := DirAccess.open(absolute_path)
+    if dir == null:
+        return
+
+    dir.list_dir_begin()
+    var file_name := dir.get_next()
+    while not file_name.is_empty():
+        var child_path := absolute_path + "/" + file_name
+        if dir.current_is_dir():
+            _remove_directory_recursive(path + "/" + file_name)
+        else:
+            DirAccess.remove_absolute(child_path)
+        file_name = dir.get_next()
+    dir.list_dir_end()
+
+    DirAccess.remove_absolute(absolute_path)
 
 func _on_model_selected(path: String) -> void:
     if current_exhibit_index < 0:
