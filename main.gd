@@ -548,7 +548,7 @@ func _delete_project(index: int) -> void:
         current_exhibit_index = -1
 
     _set_status("Проект «%s» удалён" % deleted_name)
-    _open_project_dialog()
+    call_deferred("_open_project_dialog")
 
 
 func _remove_directory_recursive(path: String) -> void:
@@ -855,7 +855,7 @@ func _add_viewer_test_object() -> void:
     var test_box := BoxMesh.new()
     test_box.size = Vector3(1.2, 0.55, 0.3)
     diagnostic_mesh.mesh = test_box
-    test_mesh.position = Vector3(0.0, 0.0, 0.0)
+    diagnostic_mesh.position = Vector3(0.0, 0.0, 0.0)
     var test_material := StandardMaterial3D.new()
     test_material.albedo_color = Color(0.85, 0.08, 0.08, 1.0)
     test_material.roughness = 0.45
