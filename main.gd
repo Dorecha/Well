@@ -570,7 +570,7 @@ func _build_viewer() -> void:
     var test_box := BoxMesh.new()
     test_box.size = Vector3(1.2, 0.55, 0.3)
     test_mesh.mesh = test_box
-    diagnostic_mesh.position = Vector3(0.0, 0.0, 0.0)
+    test_mesh.position = Vector3(0.0, 0.0, 0.0)
     var test_material := StandardMaterial3D.new()
     test_material.albedo_color = Color(0.85, 0.08, 0.08, 1.0)
     test_material.roughness = 0.45
