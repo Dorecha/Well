@@ -20,6 +20,8 @@ var theme_button: Button
 var model_root: Node3D
 var model_host: SubViewportContainer
 var camera: Camera3D
+var viewer_environment: Environment
+var model_load_generation: int = 0
 var model_pivot: Node3D
 var test_mesh: MeshInstance3D
 var info_title: Label
@@ -147,6 +149,31 @@ func _apply_theme() -> void:
         theme_button.add_theme_stylebox_override("pressed", _style_box(_theme_button_hover(), 12, _theme_border()))
 
     _apply_theme_recursive(content)
+
+    # 3D-область и её рамка не должны получать непрозрачную тему поверх SubViewport.
+    var model_panel := content.find_child("MuseumModelPanel", true, false) as Panel
+    if model_panel != null:
+        var transparent_style := _style_box(Color(0, 0, 0, 0), 24, _theme_border())
+        model_panel.add_theme_stylebox_override("panel", transparent_style)
+
+    var model_frame := content.find_child("MuseumModelFrame", true, false) as Panel
+    if model_frame != null:
+        var frame_style := StyleBoxFlat.new()
+        frame_style.bg_color = Color(0, 0, 0, 0)
+        frame_style.border_width_left = 3
+        frame_style.border_width_top = 3
+        frame_style.border_width_right = 3
+        frame_style.border_width_bottom = 3
+        frame_style.border_color = _theme_text()
+        frame_style.corner_radius_top_left = 20
+        frame_style.corner_radius_top_right = 20
+        frame_style.corner_radius_bottom_left = 20
+        frame_style.corner_radius_bottom_right = 20
+        model_frame.add_theme_stylebox_override("panel", frame_style)
+
+    if viewer_environment != null and is_instance_valid(viewer_environment):
+        viewer_environment.background_color = _theme_bg()
+        viewer_environment.ambient_light_color = _theme_text()
 
 func _apply_theme_recursive(node: Node) -> void:
     for child in node.get_children():
@@ -620,6 +647,7 @@ func _build_viewer() -> void:
     # 3D теперь рендерится непосредственно в корневой Viewport Godot.
     # SubViewport/ViewportTexture здесь больше не используется.
     var model_panel := _panel(Vector2(45, 135), Vector2(1030, 830))
+    model_panel.name = "MuseumModelPanel"
     var transparent_style := _style_box(Color(0, 0, 0, 0), 24, _theme_border())
     model_panel.add_theme_stylebox_override("panel", transparent_style)
 
@@ -645,6 +673,7 @@ func _build_viewer() -> void:
 
     var env := WorldEnvironment.new()
     var environment := Environment.new()
+    viewer_environment = environment
     environment.background_mode = Environment.BG_COLOR
     environment.background_color = Color("#f6f1eb")
     environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
@@ -732,6 +761,7 @@ func _build_viewer() -> void:
 
     # Отдельная рамка поверх 3D-области. Она не перехватывает мышь/тач.
     var frame := Panel.new()
+    frame.name = "MuseumModelFrame"
     frame.position = Vector2(1, 1)
     frame.size = Vector2(1028, 828)
     frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -751,6 +781,7 @@ func _build_viewer() -> void:
 
     _apply_theme()
     model_panel.add_theme_stylebox_override("panel", transparent_style)
+    frame_style.bg_color = Color(0, 0, 0, 0)
     frame_style.border_color = _theme_text()
     frame.add_theme_stylebox_override("panel", frame_style)
 
@@ -764,6 +795,7 @@ func _set_3d_background_visible(viewer: bool) -> void:
 
 
 func _clear_viewer_3d() -> void:
+    model_load_generation += 1
     if model_root != null and is_instance_valid(model_root):
         model_root.queue_free()
     model_root = null
@@ -771,11 +803,15 @@ func _clear_viewer_3d() -> void:
     model_pivot = null
     test_mesh = null
     camera = null
+    viewer_environment = null
     model_loaded = false
     model_error = ""
 
 
 func _load_current_model() -> void:
+    model_load_generation += 1
+    var load_generation := model_load_generation
+
     # Удаляем только предыдущую импортированную модель.
     if model_pivot == null or camera == null:
         _set_status("Ошибка: 3D-сцена не создана")
@@ -832,6 +868,11 @@ func _load_current_model() -> void:
     var scene_3d: Node3D = generated as Node3D
     model_pivot.add_child(scene_3d)
     await get_tree().process_frame
+
+    # Быстрый клик по стрелкам может запустить несколько загрузок одновременно.
+    # Если эта загрузка уже устарела или её сцена была освобождена, ничего с ней не делаем.
+    if load_generation != model_load_generation or not is_instance_valid(scene_3d):
+        return
 
     var mesh_count := _count_meshes(scene_3d)
     if mesh_count == 0:
@@ -1004,13 +1045,13 @@ func _input(event: InputEvent) -> void:
 func _orbit(delta: Vector2) -> void:
     if model_pivot == null:
         return
-    model_pivot.rotate_y(-delta.x * 0.01)
-    model_pivot.rotate_x(-delta.y * 0.006)
+    model_pivot.rotate_y(delta.x * 0.01)
+    model_pivot.rotate_x(delta.y * 0.006)
     model_pivot.rotation.x = clamp(model_pivot.rotation.x, -1.3, 1.3)
     # Диагностический объект находится вне pivot, поэтому поворачиваем его отдельно.
     if test_mesh != null and is_instance_valid(test_mesh):
-        test_mesh.rotate_y(-delta.x * 0.01)
-        test_mesh.rotate_x(-delta.y * 0.006)
+        test_mesh.rotate_y(delta.x * 0.01)
+        test_mesh.rotate_x(delta.y * 0.006)
         test_mesh.rotation.x = clamp(test_mesh.rotation.x, -1.3, 1.3)
 
 func _prev_exhibit() -> void:
