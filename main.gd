@@ -550,7 +550,6 @@ func _select_exhibit(index: int) -> void:
     if index != current_exhibit_index and editor_dirty:
         _confirm_unsaved_changes(func(): _select_exhibit(index))
         return
-        return
 
     suppress_editor_dirty = true
     current_exhibit_index = index
