@@ -527,7 +527,11 @@ func _delete_project(index: int) -> void:
     var code := str(project.get("code", ""))
     var project_dir := PROJECTS_DIR + "/" + _safe_folder(code)
 
-    _remove_directory_recursive(project_dir)
+    # Удаляем только копию данных проекта внутри user://museum_projects.
+    # Исходный файл GLB, который сотрудник выбирал на диске, здесь не используется
+    # и поэтому никогда не удаляется.
+    if not code.is_empty():
+        _remove_directory_recursive(project_dir)
 
     var project_file := _project_file(code)
     if FileAccess.file_exists(project_file):
@@ -835,6 +839,8 @@ func _load_current_model() -> void:
 
     _fit_model(scene_3d)
     model_loaded = true
+    if test_mesh != null and is_instance_valid(test_mesh):
+        test_mesh.visible = false
     _set_status("Модель загружена")
 
 
@@ -856,7 +862,7 @@ func _add_viewer_test_object() -> void:
 func _count_meshes(node: Node) -> int:
     var count := 0
     for child in node.get_children():
-        if child is MeshInstance3D:
+        if child is VisualInstance3D:
             count += 1
         count += _count_meshes(child)
     return count
@@ -892,9 +898,9 @@ func _calculate_bounds(node: Node) -> AABB:
     var result := AABB()
 
     for child in node.get_children():
-        if child is MeshInstance3D:
-            var mesh_child: MeshInstance3D = child as MeshInstance3D
-            var local_box: AABB = mesh_child.get_aabb()
+        if child is VisualInstance3D:
+            var visual: VisualInstance3D = child as VisualInstance3D
+            var local_box: AABB = visual.get_aabb()
 
             var corners: Array[Vector3] = [
                 local_box.position,
@@ -908,21 +914,20 @@ func _calculate_bounds(node: Node) -> AABB:
             ]
 
             for corner: Vector3 in corners:
-                var world_point: Vector3 = mesh_child.global_transform * corner
+                var world_point: Vector3 = visual.global_transform * corner
                 if not found:
                     result = AABB(world_point, Vector3.ZERO)
                     found = true
                 else:
                     result = result.expand(world_point)
 
-        if child is Node:
-            var sub: AABB = _calculate_bounds(child)
-            if sub.size.length() > 0.001:
-                if not found:
-                    result = sub
-                    found = true
-                else:
-                    result = result.merge(sub)
+        var sub: AABB = _calculate_bounds(child)
+        if sub.size.length() > 0.001:
+            if not found:
+                result = sub
+                found = true
+            else:
+                result = result.merge(sub)
 
     return result
 
