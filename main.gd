@@ -21,6 +21,7 @@ var model_root: Node3D
 var model_host: SubViewportContainer
 var camera: Camera3D
 var model_pivot: Node3D
+var test_mesh: MeshInstance3D
 var info_title: Label
 var info_body: RichTextLabel
 var exhibit_list: VBoxContainer
@@ -565,11 +566,11 @@ func _build_viewer() -> void:
     model_root.add_child(model_pivot)
 
     # Диагностический куб: должен быть строго внутри области 3D.
-    var test_mesh := MeshInstance3D.new()
+    test_mesh = MeshInstance3D.new()
     var test_box := BoxMesh.new()
-    test_box.size = Vector3(0.8, 0.8, 0.8)
+    test_box.size = Vector3(1.2, 0.55, 0.3)
     test_mesh.mesh = test_box
-    test_mesh.position = Vector3(0.0, 0.0, 0.0)
+    diagnostic_mesh.position = Vector3(0.0, 0.0, 0.0)
     var test_material := StandardMaterial3D.new()
     test_material.albedo_color = Color(0.85, 0.08, 0.08, 1.0)
     test_material.roughness = 0.45
@@ -665,6 +666,7 @@ func _clear_viewer_3d() -> void:
     model_root = null
     model_host = null
     model_pivot = null
+    test_mesh = null
     camera = null
     model_loaded = false
     model_error = ""
@@ -743,16 +745,16 @@ func _load_current_model() -> void:
 func _add_viewer_test_object() -> void:
     if model_root == null:
         return
-    var test_mesh := MeshInstance3D.new()
+    var diagnostic_mesh := MeshInstance3D.new()
     var test_box := BoxMesh.new()
-    test_box.size = Vector3(0.8, 0.8, 0.8)
-    test_mesh.mesh = test_box
+    test_box.size = Vector3(1.2, 0.55, 0.3)
+    diagnostic_mesh.mesh = test_box
     test_mesh.position = Vector3(0.0, 0.0, 0.0)
     var test_material := StandardMaterial3D.new()
     test_material.albedo_color = Color(0.85, 0.08, 0.08, 1.0)
     test_material.roughness = 0.45
-    test_mesh.material_override = test_material
-    model_root.add_child(test_mesh)
+    diagnostic_mesh.material_override = test_material
+    model_root.add_child(diagnostic_mesh)
 
 
 func _count_meshes(node: Node) -> int:
@@ -862,10 +864,7 @@ func _input(event: InputEvent) -> void:
             camera.position.z = camera_distance
 
     elif event is InputEventMouseMotion and orbiting:
-        if inside:
-            _orbit(event.relative)
-        else:
-            orbiting = false
+        _orbit(event.relative)
 
     elif event is InputEventScreenTouch and event.index == 0:
         if event.pressed:
@@ -887,6 +886,11 @@ func _orbit(delta: Vector2) -> void:
     model_pivot.rotate_y(-delta.x * 0.01)
     model_pivot.rotate_x(-delta.y * 0.006)
     model_pivot.rotation.x = clamp(model_pivot.rotation.x, -1.3, 1.3)
+    # Диагностический объект находится вне pivot, поэтому поворачиваем его отдельно.
+    if test_mesh != null and is_instance_valid(test_mesh):
+        test_mesh.rotate_y(-delta.x * 0.01)
+        test_mesh.rotate_x(-delta.y * 0.006)
+        test_mesh.rotation.x = clamp(test_mesh.rotation.x, -1.3, 1.3)
 
 func _prev_exhibit() -> void:
     if current_project.exhibits.is_empty(): return
