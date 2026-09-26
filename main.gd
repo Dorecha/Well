@@ -547,6 +547,10 @@ func _refresh_exhibit_list() -> void:
 func _select_exhibit(index: int) -> void:
     if index < 0 or index >= current_project.get("exhibits", []).size():
         return
+    if index != current_exhibit_index and editor_dirty:
+        _confirm_unsaved_changes(func(): _select_exhibit(index))
+        return
+        return
 
     suppress_editor_dirty = true
     current_exhibit_index = index
@@ -626,6 +630,10 @@ func _autosave_editor() -> void:
         _set_status("Автосохранение выполнено")
 
 func _move_exhibit(index: int, direction: int) -> void:
+    if editor_dirty:
+        _confirm_unsaved_changes(func(): _move_exhibit(index, direction))
+        return
+
     var exhibits: Array = current_project.get("exhibits", [])
     var target := index + direction
     if index < 0 or index >= exhibits.size() or target < 0 or target >= exhibits.size():
@@ -647,6 +655,10 @@ func _move_exhibit(index: int, direction: int) -> void:
     _set_status("Порядок экспонатов изменён")
 
 func _confirm_delete_exhibit(index: int) -> void:
+    if editor_dirty:
+        _confirm_unsaved_changes(func(): _confirm_delete_exhibit(index))
+        return
+
     var exhibits: Array = current_project.get("exhibits", [])
     if index < 0 or index >= exhibits.size():
         return
