@@ -49,6 +49,11 @@ const AUTO_ROTATE_DELAY := 5.0
 const AUTO_ROTATE_SPEED := 0.12
 var idle_since_interaction := 0.0
 
+const AUTOSAVE_DELAY := 3.0
+var editor_dirty := false
+var autosave_elapsed := 0.0
+var suppress_editor_dirty := false
+
 func _ready() -> void:
     DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(PROJECTS_DIR))
     _build_root()
@@ -84,8 +89,8 @@ func _build_root() -> void:
     file_dialog = FileDialog.new()
     file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
     file_dialog.access = FileDialog.ACCESS_FILESYSTEM
+    # Храним модель одним файлом, поэтому принимаем только GLB.
     file_dialog.add_filter("*.glb", "3D models (GLB)")
-    file_dialog.add_filter("*.gltf", "3D models (glTF)")
     file_dialog.file_selected.connect(_on_model_selected)
     root_ui.add_child(file_dialog)
 
@@ -160,7 +165,7 @@ func _apply_theme() -> void:
     if model_panel != null:
         # Фон области 3D всегда совпадает с фоном самого SubViewport.
         # Это не даёт чёрному прямоугольнику "вылезать" за рамку.
-        var viewer_style := _style_box(Color("#171513"), 24, _theme_border())
+        var viewer_style := _style_box(_theme_bg(), 24, _theme_border())
         model_panel.add_theme_stylebox_override("panel", viewer_style)
 
     var model_frame := content.find_child("MuseumModelFrame", true, false) as Panel
@@ -250,7 +255,49 @@ func _panel(pos: Vector2, size: Vector2) -> Panel:
     content.add_child(p)
     return p
 
+func _confirm_unsaved_changes(callback: Callable) -> void:
+    var dialog := ConfirmationDialog.new()
+    dialog.title = "Несохранённые изменения"
+    dialog.dialog_text = "В текущем экспонате есть изменения, которые ещё не сохранены. Сохранить их перед выходом?"
+    dialog.ok_button_text = "Сохранить"
+    dialog.cancel_button_text = "Отмена"
+    dialog.add_button("Не сохранять", false, "discard")
+
+    dialog.custom_action.connect(func(action: String, d=dialog):
+        if action != "discard":
+            return
+        d.hide()
+        d.queue_free()
+        editor_dirty = false
+        autosave_elapsed = 0.0
+        callback.call()
+    )
+
+    dialog.confirmed.connect(func(d=dialog):
+        if _sync_editor_to_project():
+            _save_project(current_project)
+            editor_dirty = false
+            autosave_elapsed = 0.0
+            d.hide()
+            d.queue_free()
+            callback.call()
+        else:
+            d.hide()
+            d.queue_free()
+    )
+
+    dialog.canceled.connect(func(d=dialog):
+        d.hide()
+        d.queue_free()
+    )
+
+    root_ui.add_child(dialog)
+    dialog.popup_centered()
+
 func _show_home() -> void:
+    if mode == "editor" and editor_dirty:
+        _confirm_unsaved_changes(_show_home)
+        return
     _clear_viewer_3d()
     _set_3d_background_visible(false)
     mode = "home"
@@ -320,6 +367,21 @@ func _create_project() -> void:
     if project_name.is_empty() or code.is_empty():
         _set_status("Заполните оба поля")
         return
+
+    var code_error := _validate_project_code(code)
+    if not code_error.is_empty():
+        _set_status(code_error)
+        return
+
+    for project in projects:
+        if str(project.get("code", "")).to_lower() == code.to_lower():
+            _set_status("Проект с кодом «%s» уже существует" % code)
+            return
+
+    if FileAccess.file_exists(_project_file(code)):
+        _set_status("Проект с таким кодом уже существует на диске")
+        return
+
     current_project = {
         "name": project_name,
         "code": code,
@@ -334,6 +396,8 @@ func _show_editor() -> void:
     _clear_viewer_3d()
     _set_3d_background_visible(false)
     mode = "editor"
+    editor_dirty = false
+    autosave_elapsed = 0.0
     _clear_content()
     title_label.text = str(current_project.get("name", "Проект"))
     status_label.text = "Редактор экспонатов"
@@ -375,6 +439,8 @@ func _show_editor() -> void:
 
     _build_editor_form(view)
     _refresh_exhibit_list()
+    editor_dirty = false
+    autosave_elapsed = 0.0
     _apply_theme()
 
 func _build_editor_form(panel: Panel) -> void:
@@ -394,6 +460,13 @@ func _build_editor_form(panel: Panel) -> void:
     editing_description.size = Vector2(680, 300)
     editing_description.add_theme_font_size_override("font_size", 17)
     panel.add_child(editing_description)
+
+    editing_title.text_changed.connect(_mark_editor_dirty)
+    editing_author.text_changed.connect(_mark_editor_dirty)
+    editing_date.text_changed.connect(_mark_editor_dirty)
+    editing_material.text_changed.connect(_mark_editor_dirty)
+    editing_inventory.text_changed.connect(_mark_editor_dirty)
+    editing_description.text_changed.connect(_mark_editor_dirty)
 
     _label_on(panel, "3D-модель", Vector2(680, 455), 17)
     selected_file_label = Label.new()
@@ -430,16 +503,52 @@ func _build_editor_form(panel: Panel) -> void:
 func _refresh_exhibit_list() -> void:
     for c in exhibit_list.get_children():
         c.queue_free()
-    for i in range(current_project.get("exhibits", []).size()):
-        var ex: Dictionary = current_project.exhibits[i]
-        var b := Button.new()
-        b.text = "%02d  %s" % [i + 1, str(ex.get("title", "Без названия"))]
-        b.custom_minimum_size = Vector2(350, 52)
-        b.add_theme_font_size_override("font_size", 16)
-        b.pressed.connect(func(idx=i): _select_exhibit(idx))
-        exhibit_list.add_child(b)
+
+    var exhibits: Array = current_project.get("exhibits", [])
+    for i in range(exhibits.size()):
+        var ex: Dictionary = exhibits[i]
+        var row := HBoxContainer.new()
+        row.custom_minimum_size = Vector2(350, 52)
+        row.add_theme_constant_override("separation", 5)
+
+        var item := Button.new()
+        item.text = "%02d  %s" % [i + 1, str(ex.get("title", "Без названия"))]
+        item.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        item.custom_minimum_size = Vector2(220, 52)
+        item.add_theme_font_size_override("font_size", 16)
+        item.pressed.connect(func(idx=i): _select_exhibit(idx))
+        row.add_child(item)
+
+        var up := Button.new()
+        up.text = "↑"
+        up.custom_minimum_size = Vector2(35, 52)
+        up.tooltip_text = "Переместить вверх"
+        up.disabled = i == 0
+        up.pressed.connect(func(idx=i): _move_exhibit(idx, -1))
+        row.add_child(up)
+
+        var down := Button.new()
+        down.text = "↓"
+        down.custom_minimum_size = Vector2(35, 52)
+        down.tooltip_text = "Переместить вниз"
+        down.disabled = i == exhibits.size() - 1
+        down.pressed.connect(func(idx=i): _move_exhibit(idx, 1))
+        row.add_child(down)
+
+        var delete := Button.new()
+        delete.text = "×"
+        delete.custom_minimum_size = Vector2(35, 52)
+        delete.tooltip_text = "Удалить экспонат"
+        delete.pressed.connect(func(idx=i): _confirm_delete_exhibit(idx))
+        row.add_child(delete)
+
+        exhibit_list.add_child(row)
 
 func _select_exhibit(index: int) -> void:
+    if index < 0 or index >= current_project.get("exhibits", []).size():
+        return
+
+    suppress_editor_dirty = true
     current_exhibit_index = index
     var ex: Dictionary = current_project.exhibits[index]
     editing_title.text = str(ex.get("title", ""))
@@ -449,6 +558,9 @@ func _select_exhibit(index: int) -> void:
     editing_inventory.text = str(ex.get("inventory", ""))
     editing_description.text = str(ex.get("description", ""))
     selected_file_label.text = str(ex.get("model_name", "Файл не выбран"))
+    suppress_editor_dirty = false
+    editor_dirty = false
+    autosave_elapsed = 0.0
     _set_status("Редактируется экспонат %d" % (index + 1))
 
 func _new_exhibit() -> void:
@@ -463,26 +575,148 @@ func _new_exhibit() -> void:
         "model_name": ""
     }
     current_project.exhibits.append(ex)
-    _save_project(current_project)
     current_exhibit_index = current_project.exhibits.size() - 1
+    _save_project(current_project)
     _refresh_exhibit_list()
     _select_exhibit(current_exhibit_index)
+    _set_status("Создан новый экспонат")
 
-func _save_current_exhibit() -> void:
-    if current_exhibit_index < 0:
-        _set_status("Сначала добавьте экспонат")
-        return
+func _sync_editor_to_project() -> bool:
+    if current_exhibit_index < 0 or current_exhibit_index >= current_project.get("exhibits", []).size():
+        return false
+
+    var title := editing_title.text.strip_edges()
+    if title.is_empty():
+        _set_status("Название экспоната не может быть пустым")
+        return false
+
     var ex: Dictionary = current_project.exhibits[current_exhibit_index]
-    ex.title = editing_title.text.strip_edges()
+    ex.title = title
     ex.author = editing_author.text.strip_edges()
     ex.date = editing_date.text.strip_edges()
     ex.material = editing_material.text.strip_edges()
     ex.inventory = editing_inventory.text.strip_edges()
     ex.description = editing_description.text
     current_project.exhibits[current_exhibit_index] = ex
+    return true
+
+func _save_current_exhibit() -> void:
+    if not _sync_editor_to_project():
+        return
     _save_project(current_project)
+    editor_dirty = false
+    autosave_elapsed = 0.0
     _refresh_exhibit_list()
     _set_status("Сохранено")
+
+func _mark_editor_dirty() -> void:
+    if suppress_editor_dirty or mode != "editor":
+        return
+    editor_dirty = true
+    autosave_elapsed = 0.0
+    _set_status("Есть несохранённые изменения")
+
+func _autosave_editor() -> void:
+    if not editor_dirty or current_exhibit_index < 0:
+        return
+    if _sync_editor_to_project():
+        _save_project(current_project)
+        editor_dirty = false
+        autosave_elapsed = 0.0
+        _set_status("Автосохранение выполнено")
+
+func _move_exhibit(index: int, direction: int) -> void:
+    var exhibits: Array = current_project.get("exhibits", [])
+    var target := index + direction
+    if index < 0 or index >= exhibits.size() or target < 0 or target >= exhibits.size():
+        return
+
+    var tmp = exhibits[index]
+    exhibits[index] = exhibits[target]
+    exhibits[target] = tmp
+    current_project.exhibits = exhibits
+
+    if current_exhibit_index == index:
+        current_exhibit_index = target
+    elif current_exhibit_index == target:
+        current_exhibit_index = index
+
+    _save_project(current_project)
+    _refresh_exhibit_list()
+    _select_exhibit(current_exhibit_index)
+    _set_status("Порядок экспонатов изменён")
+
+func _confirm_delete_exhibit(index: int) -> void:
+    var exhibits: Array = current_project.get("exhibits", [])
+    if index < 0 or index >= exhibits.size():
+        return
+
+    var ex: Dictionary = exhibits[index]
+    var dialog := ConfirmationDialog.new()
+    dialog.title = "Удалить экспонат?"
+    dialog.dialog_text = "Экспонат «%s» будет удалён из проекта вместе с его копией 3D-модели." % str(ex.get("title", "Без названия"))
+    dialog.ok_button_text = "Удалить"
+    dialog.cancel_button_text = "Отмена"
+    dialog.confirmed.connect(func(idx=index, d=dialog):
+        d.hide()
+        d.queue_free()
+        _delete_exhibit(idx)
+    )
+    dialog.canceled.connect(func(d=dialog):
+        d.hide()
+        d.queue_free()
+    )
+    root_ui.add_child(dialog)
+    dialog.popup_centered()
+
+func _delete_exhibit(index: int) -> void:
+    var exhibits: Array = current_project.get("exhibits", [])
+    if index < 0 or index >= exhibits.size():
+        return
+
+    var ex: Dictionary = exhibits[index]
+    _delete_managed_model(str(ex.get("model_path", "")))
+    exhibits.remove_at(index)
+    current_project.exhibits = exhibits
+
+    if exhibits.is_empty():
+        current_exhibit_index = -1
+        _clear_editor_fields()
+    else:
+        if current_exhibit_index > index:
+            current_exhibit_index -= 1
+        elif current_exhibit_index == index:
+            current_exhibit_index = min(index, exhibits.size() - 1)
+
+    _save_project(current_project)
+    _refresh_exhibit_list()
+    if current_exhibit_index >= 0:
+        _select_exhibit(current_exhibit_index)
+
+    _set_status("Экспонат удалён")
+
+func _clear_editor_fields() -> void:
+    suppress_editor_dirty = true
+    if editing_title != null:
+        editing_title.text = ""
+        editing_author.text = ""
+        editing_date.text = ""
+        editing_material.text = ""
+        editing_inventory.text = ""
+        editing_description.text = ""
+    if selected_file_label != null:
+        selected_file_label.text = "Файл не выбран"
+    suppress_editor_dirty = false
+    editor_dirty = false
+    autosave_elapsed = 0.0
+
+func _delete_managed_model(model_path: String) -> void:
+    if model_path.is_empty():
+        return
+    var project_dir := ProjectSettings.globalize_path(PROJECTS_DIR + "/" + _safe_folder(str(current_project.code)))
+    var absolute_model := ProjectSettings.globalize_path(model_path)
+    if absolute_model.begins_with(project_dir + "/") and FileAccess.file_exists(model_path):
+        DirAccess.remove_absolute(absolute_model)
 
 func _open_project_dialog() -> void:
     if projects.is_empty():
@@ -611,31 +845,55 @@ func _on_model_selected(path: String) -> void:
     if current_exhibit_index < 0:
         _set_status("Сначала создайте экспонат")
         return
+    if not path.to_lower().ends_with(".glb"):
+        _set_status("Поддерживается только формат GLB")
+        return
+
+    var document := GLTFDocument.new()
+    var state := GLTFState.new()
+    var validation_error: Error = document.append_from_file(path, state)
+    if validation_error != OK:
+        _set_status("Файл GLB повреждён или не читается: %s" % error_string(validation_error))
+        return
+
     var source := FileAccess.open(path, FileAccess.READ)
     if source == null:
         _set_status("Не удалось открыть файл")
         return
     var data := source.get_buffer(source.get_length())
     source.close()
+
     var safe_name := path.get_file().replace(" ", "_")
     var project_dir := PROJECTS_DIR + "/" + _safe_folder(str(current_project.code))
     DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(project_dir))
     var target := project_dir + "/" + safe_name
+
+    var ex: Dictionary = current_project.exhibits[current_exhibit_index]
+    var previous_model := str(ex.get("model_path", ""))
+
     var out := FileAccess.open(target, FileAccess.WRITE)
     if out == null:
         _set_status("Не удалось сохранить модель")
         return
     out.store_buffer(data)
     out.close()
-    var ex: Dictionary = current_project.exhibits[current_exhibit_index]
+
+    if not previous_model.is_empty() and previous_model != target:
+        _delete_managed_model(previous_model)
+
     ex.model_path = target
     ex.model_name = path.get_file()
     current_project.exhibits[current_exhibit_index] = ex
     _save_project(current_project)
     selected_file_label.text = path.get_file()
-    _set_status("3D-модель добавлена")
+    editor_dirty = false
+    autosave_elapsed = 0.0
+    _set_status("3D-модель проверена и добавлена")
 
 func _show_viewer() -> void:
+    if mode == "editor" and editor_dirty:
+        _confirm_unsaved_changes(_show_viewer)
+        return
     _clear_viewer_3d()
     _set_3d_background_visible(true)
     idle_since_interaction = 0.0
@@ -1028,6 +1286,11 @@ func _on_model_gui_input(_event: InputEvent) -> void:
     pass
 
 func _process(delta: float) -> void:
+    if mode == "editor" and editor_dirty:
+        autosave_elapsed += delta
+        if autosave_elapsed >= AUTOSAVE_DELAY:
+            _autosave_editor()
+
     if mode != "viewer" or not model_loaded:
         return
     if model_pivot == null or not is_instance_valid(model_pivot):
@@ -1140,6 +1403,17 @@ func _line_on(parent: Control, pos: Vector2, size: Vector2, placeholder: String)
 func _set_status(text: String) -> void:
     status_label.text = text
 
+func _validate_project_code(code: String) -> String:
+    if code.length() < 3 or code.length() > 32:
+        return "Код проекта должен содержать от 3 до 32 символов"
+
+    var regex := RegEx.new()
+    regex.compile("^[A-Za-z0-9_-]+$")
+    if regex.search(code) == null:
+        return "Код: только латинские буквы, цифры, «-» и «_», без пробелов"
+
+    return ""
+
 func _safe_folder(s: String) -> String:
     var out := s
     for c in ["/", ":", "*", "?", "<", ">", "|", " "]:
@@ -1151,11 +1425,14 @@ func _project_file(code: String) -> String:
     return PROJECTS_DIR + "/" + _safe_folder(code) + ".json"
 
 func _save_project(project: Dictionary) -> void:
-    var f := FileAccess.open(_project_file(str(project.code)), FileAccess.WRITE)
+    var project_code := str(project.get("code", ""))
+    if project_code.is_empty():
+        return
+
+    var f := FileAccess.open(_project_file(project_code), FileAccess.WRITE)
     if f:
         f.store_string(JSON.stringify(project, "\t"))
         f.close()
-    _load_projects()
 
 func _load_projects() -> void:
     projects.clear()
