@@ -281,13 +281,13 @@ func _show_new_project() -> void:
     _apply_theme()
 
 func _create_project() -> void:
-    var name := editing_name.text.strip_edges()
+    var project_name := editing_name.text.strip_edges()
     var code := editing_code.text.strip_edges()
-    if name.is_empty() or code.is_empty():
+    if project_name.is_empty() or code.is_empty():
         _set_status("Заполните оба поля")
         return
     current_project = {
-        "name": name,
+        "name": project_name,
         "code": code,
         "exhibits": []
     }
@@ -486,8 +486,9 @@ func _open_project_dialog() -> void:
         delete_button.custom_minimum_size = Vector2(110, 55)
         delete_button.add_theme_font_size_override("font_size", 16)
         delete_button.pressed.connect(func(idx=i, p=popup):
+            p.hide()
             p.queue_free()
-            _confirm_delete_project(idx)
+            call_deferred("_confirm_delete_project", idx)
         )
         row.add_child(delete_button)
 
@@ -508,12 +509,14 @@ func _confirm_delete_project(index: int) -> void:
     confirm.ok_button_text = "Удалить"
     confirm.cancel_button_text = "Отмена"
     confirm.confirmed.connect(func(idx=index, dialog=confirm):
+        dialog.hide()
         dialog.queue_free()
         _delete_project(idx)
     )
     confirm.canceled.connect(func(dialog=confirm):
+        dialog.hide()
         dialog.queue_free()
-        _open_project_dialog()
+        call_deferred("_open_project_dialog")
     )
     root_ui.add_child(confirm)
     confirm.popup_centered()
@@ -832,11 +835,12 @@ func _load_current_model() -> void:
 
     var mesh_count := _count_meshes(scene_3d)
     if mesh_count == 0:
-        model_error = "В сгенерированной сцене 0 MeshInstance3D"
+        model_error = "В сгенерированной сцене 0 визуальных объектов"
         _add_viewer_test_object()
         _set_status("Ошибка GLB: " + model_error)
         return
 
+    _prepare_imported_visuals(scene_3d)
     _fit_model(scene_3d)
     model_loaded = true
     if test_mesh != null and is_instance_valid(test_mesh):
@@ -858,6 +862,22 @@ func _add_viewer_test_object() -> void:
     diagnostic_mesh.material_override = test_material
     model_root.add_child(diagnostic_mesh)
 
+
+func _prepare_imported_visuals(node: Node) -> void:
+    for child in node.get_children():
+        if child is GeometryInstance3D:
+            var geometry: GeometryInstance3D = child as GeometryInstance3D
+            geometry.visible = true
+            geometry.layers = 1
+            geometry.ignore_occlusion_culling = true
+            geometry.extra_cull_margin = 1000.0
+            geometry.visibility_range_begin = 0.0
+            geometry.visibility_range_end = 0.0
+        elif child is VisualInstance3D:
+            var visual: VisualInstance3D = child as VisualInstance3D
+            visual.visible = true
+            visual.layers = 1
+        _prepare_imported_visuals(child)
 
 func _count_meshes(node: Node) -> int:
     var count := 0
@@ -882,8 +902,8 @@ func _fit_model(scene: Node3D) -> void:
     var diameter: float = maxf(bounds.size.x, maxf(bounds.size.y, bounds.size.z))
     var scale_factor: float = 2.4 / maxf(diameter, 0.001)
 
-    model_pivot.position = -center
     model_pivot.scale = Vector3.ONE * scale_factor
+    model_pivot.position = -center * scale_factor
     model_pivot.rotation = Vector3.ZERO
 
     camera_distance = 4.0
@@ -932,7 +952,7 @@ func _calculate_bounds(node: Node) -> AABB:
     return result
 
 
-func _on_model_gui_input(event: InputEvent) -> void:
+func _on_model_gui_input(_event: InputEvent) -> void:
     pass
 
 func _input(event: InputEvent) -> void:
