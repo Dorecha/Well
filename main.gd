@@ -891,7 +891,7 @@ func _load_current_model() -> void:
         return
 
     var scene_3d: Node3D = generated as Node3D
-    model_pivot.add_child(scene_3d)
+    model_pitch.add_child(scene_3d)
     await get_tree().process_frame
 
     # Быстрый клик по стрелкам может запустить несколько загрузок одновременно.
