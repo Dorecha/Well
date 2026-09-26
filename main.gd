@@ -23,6 +23,7 @@ var camera: Camera3D
 var viewer_environment: Environment
 var model_load_generation: int = 0
 var model_pivot: Node3D
+var model_pitch: Node3D
 var test_mesh: MeshInstance3D
 var info_title: Label
 var info_body: RichTextLabel
@@ -43,6 +44,10 @@ var last_pointer := Vector2.ZERO
 var camera_distance := 4.0
 var model_loaded := false
 var model_error := ""
+
+const AUTO_ROTATE_DELAY := 5.0
+const AUTO_ROTATE_SPEED := 0.12
+var idle_since_interaction := 0.0
 
 func _ready() -> void:
     DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(PROJECTS_DIR))
@@ -153,8 +158,10 @@ func _apply_theme() -> void:
     # 3D-область и её рамка не должны получать непрозрачную тему поверх SubViewport.
     var model_panel := content.find_child("MuseumModelPanel", true, false) as Panel
     if model_panel != null:
-        var transparent_style := _style_box(Color(0, 0, 0, 0), 24, _theme_border())
-        model_panel.add_theme_stylebox_override("panel", transparent_style)
+        # Фон области 3D всегда совпадает с фоном самого SubViewport.
+        # Это не даёт чёрному прямоугольнику "вылезать" за рамку.
+        var viewer_style := _style_box(Color("#171513"), 24, _theme_border())
+        model_panel.add_theme_stylebox_override("panel", viewer_style)
 
     var model_frame := content.find_child("MuseumModelFrame", true, false) as Panel
     if model_frame != null:
@@ -631,6 +638,7 @@ func _on_model_selected(path: String) -> void:
 func _show_viewer() -> void:
     _clear_viewer_3d()
     _set_3d_background_visible(true)
+    idle_since_interaction = 0.0
     if current_exhibit_index < 0 and current_project.get("exhibits", []).size() > 0:
         current_exhibit_index = 0
     if current_project.get("exhibits", []).is_empty():
@@ -648,8 +656,9 @@ func _build_viewer() -> void:
     # SubViewport/ViewportTexture здесь больше не используется.
     var model_panel := _panel(Vector2(45, 135), Vector2(1030, 830))
     model_panel.name = "MuseumModelPanel"
-    var transparent_style := _style_box(Color(0, 0, 0, 0), 24, _theme_border())
-    model_panel.add_theme_stylebox_override("panel", transparent_style)
+    model_panel.clip_contents = true
+    var viewer_style := _style_box(Color("#171513"), 24, _theme_border())
+    model_panel.add_theme_stylebox_override("panel", viewer_style)
 
     var info_panel := _panel(Vector2(1100, 135), Vector2(775, 830))
 
@@ -694,8 +703,14 @@ func _build_viewer() -> void:
     fill.light_energy = 0.7
     model_root.add_child(fill)
 
+    # Два независимых шарнира: YAW вращается вокруг мировой вертикали,
+    # PITCH наклоняет модель вокруг её уже отцентрированной точки.
+    # Благодаря этому ось вращения не "заваливается" после нескольких жестов.
     model_pivot = Node3D.new()
     model_root.add_child(model_pivot)
+
+    model_pitch = Node3D.new()
+    model_pivot.add_child(model_pitch)
 
     # Диагностический куб: должен быть строго внутри области 3D.
     test_mesh = MeshInstance3D.new()
@@ -707,7 +722,7 @@ func _build_viewer() -> void:
     test_material.albedo_color = Color(0.85, 0.08, 0.08, 1.0)
     test_material.roughness = 0.45
     test_mesh.material_override = test_material
-    model_root.add_child(test_mesh)
+    model_pitch.add_child(test_mesh)
 
     camera = Camera3D.new()
     camera.position = Vector3(0, 0.2, camera_distance)
@@ -762,8 +777,8 @@ func _build_viewer() -> void:
     # Отдельная рамка поверх 3D-области. Она не перехватывает мышь/тач.
     var frame := Panel.new()
     frame.name = "MuseumModelFrame"
-    frame.position = Vector2(1, 1)
-    frame.size = Vector2(1028, 828)
+    frame.position = Vector2(0, 0)
+    frame.size = Vector2(1030, 830)
     frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
     var frame_style := StyleBoxFlat.new()
     frame_style.bg_color = Color(0, 0, 0, 0)
@@ -780,7 +795,7 @@ func _build_viewer() -> void:
     model_panel.add_child(frame)
 
     _apply_theme()
-    model_panel.add_theme_stylebox_override("panel", transparent_style)
+    model_panel.add_theme_stylebox_override("panel", viewer_style)
     frame_style.bg_color = Color(0, 0, 0, 0)
     frame_style.border_color = _theme_text()
     frame.add_theme_stylebox_override("panel", frame_style)
@@ -791,7 +806,9 @@ func _set_3d_background_visible(viewer: bool) -> void:
         return
     var bg := root_ui.get_child(0) as ColorRect
     if bg:
-        bg.visible = not viewer
+        # Фон приложения должен оставаться видимым и в режиме просмотра.
+        # В тёмной теме это делает тёмным весь экран, а не только info-panel.
+        bg.visible = true
 
 
 func _clear_viewer_3d() -> void:
@@ -801,11 +818,14 @@ func _clear_viewer_3d() -> void:
     model_root = null
     model_host = null
     model_pivot = null
+    model_pitch = null
     test_mesh = null
     camera = null
     viewer_environment = null
     model_loaded = false
     model_error = ""
+    orbiting = false
+    idle_since_interaction = 0.0
 
 
 func _load_current_model() -> void:
@@ -813,15 +833,20 @@ func _load_current_model() -> void:
     var load_generation := model_load_generation
 
     # Удаляем только предыдущую импортированную модель.
-    if model_pivot == null or camera == null:
+    if model_pivot == null or model_pitch == null or camera == null:
         _set_status("Ошибка: 3D-сцена не создана")
         return
-    for child in model_pivot.get_children():
-        child.queue_free()
+    for child in model_pitch.get_children():
+        if child != test_mesh:
+            child.queue_free()
 
     model_pivot.position = Vector3.ZERO
     model_pivot.rotation = Vector3.ZERO
     model_pivot.scale = Vector3.ONE
+    model_pitch.position = Vector3.ZERO
+    model_pitch.rotation = Vector3.ZERO
+    model_pitch.scale = Vector3.ONE
+    idle_since_interaction = 0.0
     model_loaded = false
 
     var ex: Dictionary = current_project.exhibits[current_exhibit_index]
@@ -930,22 +955,28 @@ func _count_meshes(node: Node) -> int:
 
 
 func _fit_model(scene: Node3D) -> void:
-    # Сначала считаем реальные границы всей импортированной сцены.
+    # Считаем реальные границы всей импортированной сцены.
     var bounds := _calculate_bounds(scene)
     if bounds.size.length() <= 0.001:
         _set_status("GLB загружен, но в нём не найдена геометрия")
         return
 
-    # Центрируем и масштабируем весь импортированный объект через pivot.
-    # Это надёжнее, чем менять position корневого узла GLTF-сцены:
-    # у некоторых GLB корневой узел имеет собственную трансформацию.
-    var center: Vector3 = bounds.position + bounds.size * 0.5
-    var diameter: float = maxf(bounds.size.x, maxf(bounds.size.y, bounds.size.z))
+    # AABB-центр становится настоящей точкой вращения.
+    # Используем диагональ bounds, а не только максимальную ось:
+    # тогда при повороте модель не начинает вылезать из области просмотра.
+    var center: Vector3 = bounds.get_center()
+    var diameter: float = bounds.size.length()
     var scale_factor: float = 2.4 / maxf(diameter, 0.001)
 
-    model_pivot.scale = Vector3.ONE * scale_factor
-    model_pivot.position = -center * scale_factor
+    # YAW/PITCH остаются в нуле, а сама модель смещается своим центром в (0,0,0).
+    # Поэтому вращение происходит строго вокруг геометрического центра.
+    scene.position = -center
+    model_pivot.position = Vector3.ZERO
     model_pivot.rotation = Vector3.ZERO
+    model_pivot.scale = Vector3.ONE
+    model_pitch.position = Vector3.ZERO
+    model_pitch.rotation = Vector3.ZERO
+    model_pitch.scale = Vector3.ONE * scale_factor
 
     camera_distance = 4.0
     camera.position = Vector3(0.0, 0.2, camera_distance)
@@ -996,6 +1027,24 @@ func _calculate_bounds(node: Node) -> AABB:
 func _on_model_gui_input(_event: InputEvent) -> void:
     pass
 
+func _process(delta: float) -> void:
+    if mode != "viewer" or not model_loaded:
+        return
+    if model_pivot == null or not is_instance_valid(model_pivot):
+        return
+
+    if orbiting:
+        return
+
+    idle_since_interaction += delta
+    if idle_since_interaction >= AUTO_ROTATE_DELAY:
+        # Очень медленный постоянный поворот только по вертикальной оси.
+        # Пользовательский наклон по X при этом полностью сохраняется.
+        model_pivot.rotate_y(AUTO_ROTATE_SPEED * delta)
+
+func _mark_model_interaction() -> void:
+    idle_since_interaction = 0.0
+
 func _input(event: InputEvent) -> void:
     if mode != "viewer":
         return
@@ -1016,43 +1065,50 @@ func _input(event: InputEvent) -> void:
             if event.pressed and inside:
                 orbiting = true
                 last_pointer = get_viewport().get_mouse_position()
+                _mark_model_interaction()
             elif not event.pressed:
                 orbiting = false
         elif inside and event.button_index == MOUSE_BUTTON_WHEEL_UP:
+            _mark_model_interaction()
             camera_distance = max(1.5, camera_distance - 0.3)
             camera.position.z = camera_distance
         elif inside and event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+            _mark_model_interaction()
             camera_distance = min(10.0, camera_distance + 0.3)
             camera.position.z = camera_distance
 
     elif event is InputEventMouseMotion and orbiting:
+        _mark_model_interaction()
         _orbit(event.relative)
 
     elif event is InputEventScreenTouch and event.index == 0:
         if event.pressed:
             orbiting = true
             last_pointer = event.position
+            _mark_model_interaction()
         else:
             orbiting = false
 
     elif event is InputEventScreenDrag and event.index == 0 and orbiting:
+        _mark_model_interaction()
         _orbit(event.relative)
 
     elif event is InputEventMagnifyGesture:
+        _mark_model_interaction()
         camera_distance = clamp(camera_distance / event.factor, 1.5, 10.0)
         camera.position.z = camera_distance
 
 func _orbit(delta: Vector2) -> void:
-    if model_pivot == null:
+    if model_pivot == null or model_pitch == null:
         return
+
+    # Горизонталь вращает весь объект вокруг мировой вертикальной оси.
     model_pivot.rotate_y(delta.x * 0.01)
-    model_pivot.rotate_x(delta.y * 0.006)
-    model_pivot.rotation.x = clamp(model_pivot.rotation.x, -1.3, 1.3)
-    # Диагностический объект находится вне pivot, поэтому поворачиваем его отдельно.
-    if test_mesh != null and is_instance_valid(test_mesh):
-        test_mesh.rotate_y(delta.x * 0.01)
-        test_mesh.rotate_x(delta.y * 0.006)
-        test_mesh.rotation.x = clamp(test_mesh.rotation.x, -1.3, 1.3)
+
+    # Вертикаль вращает только внутренний шарнир, поэтому после yaw
+    # ось наклона не "заваливается" вместе с моделью.
+    model_pitch.rotate_x(delta.y * 0.006)
+    model_pitch.rotation.x = clamp(model_pitch.rotation.x, -1.3, 1.3)
 
 func _prev_exhibit() -> void:
     if current_project.exhibits.is_empty(): return
